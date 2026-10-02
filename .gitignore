@@ -1,17 +1,58 @@
+# Python environments and generated package files
 .venv*/
+venv/
+env/
 __pycache__/
 *.py[cod]
 *.egg-info/
+.eggs/
+dist/
+
+# Test, lint, and coverage caches
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
 .cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Native builds and CUDA extension caches
 build*/
-dist/
+cmake-build*/
+CMakeFiles/
+CMakeCache.txt
+compile_commands.json
 *.so
 *.dylib
+*.dll
 *.o
+*.obj
+*.a
+*.lib
+
+# Generated benchmark and profiler outputs
+/artifacts/
 *.ncu-rep
 *.nsys-rep
+*.nsysqdrep
+*.qdrep
 *.sqlite
-artifacts/
+*.sqlite-wal
+*.sqlite-shm
+
+# Local IDE and operating-system files
+.idea/
+.vscode/
 .DS_Store
+._*
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Local environment settings (keep example configurations)
+.env
+.env.*
+!.env.example
+!.env.*.example

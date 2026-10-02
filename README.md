@@ -1,21 +1,21 @@
 # HPC GPU Kernel Lab
 
-A GPU kernel engineering lab with 50 studies covering foundational array
-operations, matrix multiplication, normalization, attention, and inference
-workloads. Implementations use CUDA, Triton, PyTorch, and JAX, with emphasis on
-correctness, benchmarking, profiling, and understanding hardware behavior.
+A collection of 50 GPU kernel studies spanning array operations, matrix
+multiplication, normalization, attention, and inference workloads. The project
+explores CUDA and Triton implementations alongside PyTorch and JAX baselines,
+with correctness testing, reproducible benchmarks, and hardware profiling.
 
-The goal is to explain how algorithms map onto hardware: what data moves, where
-parallelism comes from, which resource limits execution, and why an optimization
-changes performance. Workload sources supply starting contracts; evidence and
-technical analysis define the portfolio.
+Each study examines how an algorithm maps to GPU hardware: memory access,
+parallel execution, resource limits, and the performance impact of optimization.
+Problem documentation includes implementation details, validation status, and
+measured results as they become available.
 
 ## Roadmap
 
-`code` means implemented, with validation status in the problem README.
-`plan` means intended implementation, not existing code. `—` means no current
-backend plan.
-Source and official LeetGPU difficulty are recorded in each problem README. Status: ⬜ Planned · 🟨 In Progress · ✅ Complete · 🚀 Optimized.
+Backend availability: `code` = implemented · `plan` = planned · `—` = no planned implementation.
+Validation details are recorded in each problem README.
+
+Status: ⬜ Planned · 🟨 In Progress · ✅ Complete · 🚀 Optimized.
 
 | # | Problem | CUDA | Triton | PyTorch | JAX | Primary lesson | Status |
 | ---: | --- | :---: | :---: | :---: | :---: | --- | --- |
@@ -70,39 +70,11 @@ Source and official LeetGPU difficulty are recorded in each problem README. Stat
 | 49 | [Paged Attention](problems/49_paged_attention/README.md) | plan | plan | plan | — | Irregular decode-time attention | ⬜ Planned |
 | 50 | [MoE Token Routing and Dispatch](problems/50_moe_token_routing/README.md) | plan | plan | plan | — | Balanced scatter and expert dispatch | ⬜ Planned |
 
-For implementation, follow the [methodology and tests](docs/methodology.md),
-[benchmarking and hardware plan](docs/benchmarking.md), and [profiling plan](docs/profiling.md).
-No latency, bandwidth, or speedup is claimed before a real hardware run.
+## Development
 
-## Repository architecture
+See the [testing methodology](docs/methodology.md),
+[benchmarking guidelines](docs/benchmarking.md), and
+[profiling workflow](docs/profiling.md) for the study process.
+Setup and execution commands are documented in each problem README.
 
-```text
-hpc-gpu-kernel-lab/
-├── README.md                 # Roadmap and progress
-├── LICENSE
-├── CONTRIBUTING.md           # Status and contribution rules
-├── docs/
-│   ├── methodology.md        # Workflow and correctness testing
-│   ├── benchmarking.md       # Timing, hardware, and reproducibility
-│   └── profiling.md          # Nsight investigation plan
-└── problems/
-    ├── 01_vector_add/         # Implementations, tests, benchmarks, study notes
-    ├── ...                   # 50 study plans
-    └── 50_moe_token_routing/README.md
-```
-
-Backend/test/result subdirectories are documented per problem and created only
-when their first meaningful file exists. There are no empty `.cu`/`.py` files,
-no generated solution placeholders. Vector addition builds its CUDA extension
-on first use; see its README for setup, tests, benchmarks, and profiling commands.
-
-## Evidence and attribution
-
-Status is maintained in this roadmap and each problem README. See the
-[contribution guide](CONTRIBUTING.md) for completion criteria and the
-[benchmarking plan](docs/benchmarking.md) for reproducibility requirements.
-**Results pending hardware benchmark.**
-
-LeetGPU names and links provide attribution; this independent lab is not
-affiliated with LeetGPU or an employer. Original material is MIT licensed;
-third-party content retains its own terms.
+Contribution requirements are described in [CONTRIBUTING.md](CONTRIBUTING.md).

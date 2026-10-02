@@ -51,6 +51,8 @@ kv_cache_operations/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

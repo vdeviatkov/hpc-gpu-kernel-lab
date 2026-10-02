@@ -55,6 +55,8 @@ reduction/
     jax/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

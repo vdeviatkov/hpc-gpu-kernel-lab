@@ -55,6 +55,8 @@ rope/
     jax/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

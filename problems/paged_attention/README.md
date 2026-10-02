@@ -52,6 +52,8 @@ paged_attention/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

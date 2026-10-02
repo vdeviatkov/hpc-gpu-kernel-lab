@@ -52,6 +52,8 @@ interleave_arrays/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

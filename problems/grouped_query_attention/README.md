@@ -55,6 +55,8 @@ grouped_query_attention/
     jax/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

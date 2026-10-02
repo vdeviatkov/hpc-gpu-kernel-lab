@@ -54,6 +54,8 @@ gaussian_blur/
     jax/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

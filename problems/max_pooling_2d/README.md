@@ -52,6 +52,8 @@ max_pooling_2d/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

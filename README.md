@@ -12,25 +12,10 @@ parallel execution, resource limits, and the performance impact of optimization.
 Problem documentation includes implementation details, validation status, and
 measured results as they become available.
 
-## Results so far
-
-[**01 · Vector Addition**](problems/vector_add/README.md) on an RTX 5080: one
-launch-bound, one L2-resident and one DRAM-bound regime, and the kernel changes
-that do or do not move each one.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="problems/vector_add/figures/bandwidth_vs_size_dark.svg">
-  <img alt="Effective bandwidth vs working-set size for vector addition on RTX 5080, FP32 and FP16: launch-bound below about 1 MB, near 3 TB/s while resident in the 64 MiB L2, about 840 GB/s from DRAM." src="problems/vector_add/figures/bandwidth_vs_size_light.svg">
-</picture>
-
-- Large vectors stream from DRAM at 85–90% of the 960 GB/s spec peak on every backend.
-- 16-byte vector loads make FP16 5.5% faster than scalar access (2.2% faster than
-  PyTorch); for FP32 they cut instructions 64% but leave latency within ±1%.
-- Capped grid-stride loops cost more than vectorization saves: up to 2.6% for FP32.
-
 ## Roadmap
 
-Validation details are recorded in each problem README.
+Each problem README links to its design, results, testing, benchmarking and
+profiling pages.
 
 Status: ⬜ Planned · 🟨 In Progress · ✅ Complete · 🚀 Optimized.
 
@@ -92,6 +77,7 @@ Status: ⬜ Planned · 🟨 In Progress · ✅ Complete · 🚀 Optimized.
 See the [testing methodology](docs/methodology.md),
 [benchmarking guidelines](docs/benchmarking.md), and
 [profiling workflow](docs/profiling.md) for the study process.
-Setup and execution commands are documented in each problem README.
+Setup and execution commands are documented in each problem's `docs/` pages;
+[Vector Addition](problems/vector_add/README.md) is the reference layout.
 
 Contribution requirements are described in [CONTRIBUTING.md](CONTRIBUTING.md).

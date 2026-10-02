@@ -55,6 +55,8 @@ swiglu_mlp/
     jax/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

@@ -53,6 +53,8 @@ matrix_transpose/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

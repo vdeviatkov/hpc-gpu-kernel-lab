@@ -52,6 +52,8 @@ matrix_copy/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

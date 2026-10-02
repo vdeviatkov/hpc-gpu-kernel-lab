@@ -53,6 +53,8 @@ dense_gemv/
     jax/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

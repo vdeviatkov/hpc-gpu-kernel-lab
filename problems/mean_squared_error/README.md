@@ -54,6 +54,8 @@ mean_squared_error/
     jax/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

@@ -55,6 +55,8 @@ matrix_multiplication_fp32/
     jax/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

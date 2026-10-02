@@ -52,6 +52,8 @@ moe_token_routing/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

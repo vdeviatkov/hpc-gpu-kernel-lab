@@ -53,6 +53,8 @@ prefix_sum/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

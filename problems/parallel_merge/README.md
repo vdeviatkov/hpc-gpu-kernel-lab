@@ -50,6 +50,8 @@ parallel_merge/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

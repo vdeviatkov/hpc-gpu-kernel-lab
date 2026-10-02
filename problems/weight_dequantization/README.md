@@ -52,6 +52,8 @@ weight_dequantization/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

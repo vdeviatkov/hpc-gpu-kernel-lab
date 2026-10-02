@@ -54,6 +54,8 @@ swiglu_activation/
     jax/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

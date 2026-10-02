@@ -51,6 +51,8 @@ quantization_pipeline/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

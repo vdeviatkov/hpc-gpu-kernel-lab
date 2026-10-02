@@ -55,6 +55,8 @@ fused_residual_rms_norm/
     jax/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

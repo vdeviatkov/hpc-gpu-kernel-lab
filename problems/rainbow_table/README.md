@@ -50,6 +50,8 @@ rainbow_table/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

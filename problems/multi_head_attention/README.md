@@ -55,6 +55,8 @@ multi_head_attention/
     jax/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

@@ -54,6 +54,8 @@ convolution_1d/
     jax/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

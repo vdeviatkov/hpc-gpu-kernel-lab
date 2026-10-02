@@ -53,6 +53,8 @@ histogramming/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

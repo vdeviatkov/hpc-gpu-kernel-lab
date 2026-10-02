@@ -52,6 +52,8 @@ rgb_to_grayscale/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

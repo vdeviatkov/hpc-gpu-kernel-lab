@@ -52,6 +52,8 @@ relu/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

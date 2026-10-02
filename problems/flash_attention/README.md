@@ -54,6 +54,8 @@ flash_attention/
     jax/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

@@ -56,6 +56,8 @@ gemm_fp16/
     jax/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

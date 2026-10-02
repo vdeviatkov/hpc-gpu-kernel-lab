@@ -53,6 +53,8 @@ sparse_matvec/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

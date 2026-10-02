@@ -55,6 +55,8 @@ dot_product/
     jax/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

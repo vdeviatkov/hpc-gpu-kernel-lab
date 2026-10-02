@@ -53,6 +53,8 @@ fused_gemm_epilogue/
     jax/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

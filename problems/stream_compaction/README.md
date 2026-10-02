@@ -53,6 +53,8 @@ stream_compaction/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

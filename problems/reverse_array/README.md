@@ -52,6 +52,8 @@ reverse_array/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

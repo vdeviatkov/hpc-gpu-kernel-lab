@@ -53,6 +53,8 @@ int8_quantized_matmul/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

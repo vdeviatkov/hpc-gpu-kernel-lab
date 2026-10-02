@@ -52,6 +52,8 @@ count_array_element/
     pytorch/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

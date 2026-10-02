@@ -55,6 +55,8 @@ categorical_cross_entropy/
     jax/
     tests/
     benchmarks/
+    figures/
+    docs/
     results/
 ```
 

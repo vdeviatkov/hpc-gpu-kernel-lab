@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/gpu-performance-lab.iml" filepath="$PROJECT_DIR$/.idea/gpu-performance-lab.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/hpc-gpu-kernel-lab.iml" filepath="$PROJECT_DIR$/.idea/hpc-gpu-kernel-lab.iml" />
     </modules>
   </component>
 </project>

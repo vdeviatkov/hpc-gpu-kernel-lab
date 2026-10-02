@@ -1,8 +1,9 @@
-# GPU Performance Lab
+# HPC GPU Kernel Lab
 
-A structured GPU performance engineering curriculum exploring CUDA, Triton,
-PyTorch, and JAX implementations of increasingly complex GPU and ML workloads,
-with emphasis on benchmarking, profiling, hardware behavior, and optimization methodology.
+A GPU kernel engineering lab with 50 studies covering foundational array
+operations, matrix multiplication, normalization, attention, and inference
+workloads. Implementations use CUDA, Triton, PyTorch, and JAX, with emphasis on
+correctness, benchmarking, profiling, and understanding hardware behavior.
 
 The goal is to explain how algorithms map onto hardware: what data moves, where
 parallelism comes from, which resource limits execution, and why an optimization
@@ -76,7 +77,7 @@ No latency, bandwidth, or speedup is claimed before a real hardware run.
 ## Repository architecture
 
 ```text
-gpu-performance-lab/
+hpc-gpu-kernel-lab/
 ├── README.md                 # Roadmap and progress
 ├── LICENSE
 ├── CONTRIBUTING.md           # Status and contribution rules

@@ -21,3 +21,11 @@ There is no separate progress dashboard or coverage counter to synchronize.
 If backend scope changes, explain why and update the roadmap cells. Put real
 results with the problem; retain raw samples and use generated reports as views.
 Until measured, write **Results pending hardware benchmark**.
+
+## Layout and checks
+
+Problem directories use plain importable names (`problems/vector_add`); the
+roadmap table owns the numbering. CI runs `ruff`, `clang-format` and the CPU
+test suite on every push and pull request. GPU backends skip in CI, so run the
+full suite, Compute Sanitizer and benchmarks on NVIDIA hardware and record the
+results in the problem README.

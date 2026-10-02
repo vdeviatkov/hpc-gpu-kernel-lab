@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Pinned so formatting does not drift with new tool releases.
+      - run: python -m pip install ruff==0.16.10 clang-format==21.1.2
+      - run: ruff check problems
+      - run: ruff format --check problems
+      - run: clang-format --dry-run --Werror $(git ls-files '*.cu' '*.cuh' '*.cpp' '*.h')
+
+  test-cpu:
+    # GPU backends skip explicitly without NVIDIA hardware; this covers the API
+    # contract, the PyTorch reference path, and the benchmark statistics.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: problems/*/requirements.txt
+      - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install pytest
+      - run: python -m pytest -q

@@ -18,7 +18,7 @@ Status: ⬜ Planned · 🟨 In Progress · ✅ Complete · 🚀 Optimized.
 
 | # | Problem | CUDA | Triton | PyTorch | JAX | Primary lesson | Status |
 | ---: | --- | :---: | :---: | :---: | :---: | --- | --- |
-| 01 | [Vector Addition](problems/01_vector_add/README.md) | ✅ | ✅ | ✅ | ✅ | Launch overhead vs bandwidth | 🟨 In Progress |
+| 01 | [Vector Addition](problems/01_vector_add/README.md) | ✅ | ✅ | ✅ | ✅ | Launch overhead vs bandwidth | ✅ Complete |
 | 02 | [ReLU](problems/02_relu/README.md) | — | — | — | — | Predication and branching | ⬜ Planned |
 | 03 | [Reverse Array](problems/03_reverse_array/README.md) | — | — | — | — | Race-free in-place indexing | ⬜ Planned |
 | 04 | [Interleave Arrays](problems/04_interleave_arrays/README.md) | — | — | — | — | Lane-to-output mapping | ⬜ Planned |

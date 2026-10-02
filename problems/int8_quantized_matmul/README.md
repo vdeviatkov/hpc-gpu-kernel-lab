@@ -55,7 +55,6 @@ int8_quantized_matmul/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

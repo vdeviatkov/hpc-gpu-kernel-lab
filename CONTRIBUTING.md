@@ -36,13 +36,12 @@ roadmap table owns the numbering. A started study follows the
 ├── tests/           correctness and benchmark-statistics tests
 ├── benchmarks/      run.py, report.py, plot.py, sweep.sh
 ├── figures/         generated charts (tracked)
-├── docs/
-│   ├── design.md        source, contract, variants, performance model
-│   ├── results.md       environment, tables, profiler evidence, limitations
-│   ├── testing.md       setup, correctness suite, sanitizer
-│   ├── benchmarking.md  scopes, options, reproduction, output format
-│   └── profiling.md     profiler commands and what they test
-└── results/         raw JSON and profiler output (ignored by Git)
+└── docs/
+    ├── design.md        source, contract, variants, performance model
+    ├── results.md       environment, tables, profiler evidence, limitations
+    ├── testing.md       setup, correctness suite, sanitizer
+    ├── benchmarking.md  scopes, options, reproduction, output format
+    └── profiling.md     profiler commands and what they test
 ```
 
 Keep the README short; detail belongs in `docs/`. Each docs page starts with the

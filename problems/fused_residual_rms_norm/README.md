@@ -57,7 +57,6 @@ fused_residual_rms_norm/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

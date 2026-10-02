@@ -56,7 +56,6 @@ silu/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

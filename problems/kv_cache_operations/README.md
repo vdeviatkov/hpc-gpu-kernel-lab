@@ -53,7 +53,6 @@ kv_cache_operations/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

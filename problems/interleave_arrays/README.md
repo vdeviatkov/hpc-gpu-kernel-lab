@@ -54,7 +54,6 @@ interleave_arrays/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

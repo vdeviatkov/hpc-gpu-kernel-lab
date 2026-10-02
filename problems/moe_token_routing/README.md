@@ -54,7 +54,6 @@ moe_token_routing/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

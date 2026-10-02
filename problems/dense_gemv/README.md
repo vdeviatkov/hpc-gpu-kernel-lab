@@ -55,7 +55,6 @@ dense_gemv/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

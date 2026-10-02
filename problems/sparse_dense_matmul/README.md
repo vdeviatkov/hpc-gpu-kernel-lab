@@ -55,7 +55,6 @@ sparse_dense_matmul/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

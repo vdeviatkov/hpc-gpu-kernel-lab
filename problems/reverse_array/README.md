@@ -54,7 +54,6 @@ reverse_array/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

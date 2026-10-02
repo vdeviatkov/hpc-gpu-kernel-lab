@@ -31,8 +31,8 @@ RTX 5080, spec peak 960 GB/s. Full tables, profiler evidence and caveats are in
 
 | Page | Contents |
 |---|---|
-| [Design](docs/design.md) | Source problem, API contract, the 2×2 CUDA variant design, performance model |
-| [Results](docs/results.md) | Environment, latency tables, Nsight Compute evidence, size sweep, limitations |
+| [Design](docs/design.md) | Source problem, API contract, the four CUDA kernel variants, performance model |
+| [Results](docs/results.md) | Latency per backend, why the kernels differ, small-vector cost, validation, limitations |
 | [Testing](docs/testing.md) | Toolchain setup, correctness suite, Compute Sanitizer |
 | [Benchmarking](docs/benchmarking.md) | Timing scopes, commands, full reproduction sweep, output format |
 | [Profiling](docs/profiling.md) | Nsight Compute, Nsight Systems, register and SASS inspection |
@@ -73,6 +73,5 @@ vector_add/
 ├── tests/               correctness and benchmark-statistics tests
 ├── benchmarks/          run.py, report.py, plot.py, sweep.sh
 ├── figures/             generated charts (tracked)
-├── docs/                design, results, testing, benchmarking, profiling
-└── results/             raw JSON and profiler output (ignored by Git)
+└── docs/                design, results, testing, benchmarking, profiling
 ```

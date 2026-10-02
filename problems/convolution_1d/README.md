@@ -56,7 +56,6 @@ convolution_1d/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

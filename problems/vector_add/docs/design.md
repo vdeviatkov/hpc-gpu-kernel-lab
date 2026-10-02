@@ -25,7 +25,7 @@ The checked entry point is `api.add(a, b, backend=..., out=None)`:
 
 ## Implementations
 
-The four CUDA variants form a 2×2 design, so each comparison changes one factor:
+The four CUDA kernels combine two choices, so any two neighbouring cells differ in one thing:
 
 | | One item per thread | Capped grid-stride loop (≤ 4096 blocks) |
 |---|---|---|

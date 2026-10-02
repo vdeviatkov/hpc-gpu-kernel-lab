@@ -52,7 +52,6 @@ rainbow_table/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

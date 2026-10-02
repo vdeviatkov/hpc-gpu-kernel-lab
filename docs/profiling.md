@@ -48,8 +48,7 @@ and memory state, so keep uninstrumented timing separate.
 Select one small, one typical, and one resource-stressing shape. Capture baseline
 and the proposed variant under the same environment. Record the exact command,
 source revision, GPU/tool versions, section selection, expected bottleneck, and
-observed differences. Link raw reports from the study's eventual `results/`
-directory; large reports can live as release artifacts with checksums.
+observed differences, and summarize them in the study's `docs/results.md`.
 
 Use memory, race, and synchronization checking before trusting a speedup from
 shared memory, in-place updates, or asynchronous work. Those checks are future

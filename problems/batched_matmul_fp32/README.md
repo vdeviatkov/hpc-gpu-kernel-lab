@@ -57,7 +57,6 @@ batched_matmul_fp32/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

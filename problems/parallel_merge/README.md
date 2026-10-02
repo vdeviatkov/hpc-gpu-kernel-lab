@@ -52,7 +52,6 @@ parallel_merge/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

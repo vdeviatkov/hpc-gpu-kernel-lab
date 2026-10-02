@@ -56,7 +56,6 @@ swiglu_activation/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

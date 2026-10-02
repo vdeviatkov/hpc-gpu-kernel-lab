@@ -55,7 +55,6 @@ sparse_matvec/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

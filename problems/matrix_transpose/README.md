@@ -55,7 +55,6 @@ matrix_transpose/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

@@ -61,7 +61,7 @@ Missing hardware is a skip; compilation or correctness failures are failures.
 ## Repository organization
 
 Create `cuda/`, `triton/`, `pytorch/`, or `jax/` inside a problem when its first
-implementation exists. Add local `tests/`, `benchmarks/`, and `results/` as needed.
+implementation exists. Add local `tests/`, `benchmarks/`, `docs/` and `figures/` as needed.
 Avoid empty source files and placeholder-only infrastructure directories.
 
 Extract common timing, correctness, environment, and CUDA helpers only after

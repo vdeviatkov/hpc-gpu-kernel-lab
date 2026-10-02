@@ -57,7 +57,6 @@ swiglu_mlp/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

@@ -55,7 +55,6 @@ fused_gemm_epilogue/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

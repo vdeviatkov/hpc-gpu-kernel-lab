@@ -57,7 +57,6 @@ matrix_multiplication_fp32/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

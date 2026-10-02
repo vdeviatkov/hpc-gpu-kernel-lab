@@ -57,7 +57,6 @@ rms_norm/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

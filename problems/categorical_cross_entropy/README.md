@@ -57,7 +57,6 @@ categorical_cross_entropy/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

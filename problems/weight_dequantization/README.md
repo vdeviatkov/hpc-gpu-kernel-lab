@@ -54,7 +54,6 @@ weight_dequantization/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

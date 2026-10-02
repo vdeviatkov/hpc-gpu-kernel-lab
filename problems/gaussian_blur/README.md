@@ -56,7 +56,6 @@ gaussian_blur/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

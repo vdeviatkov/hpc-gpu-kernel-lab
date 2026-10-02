@@ -54,7 +54,6 @@ relu/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

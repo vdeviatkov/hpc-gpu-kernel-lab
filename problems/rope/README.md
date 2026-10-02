@@ -57,7 +57,6 @@ rope/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

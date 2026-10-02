@@ -54,7 +54,6 @@ matrix_copy/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

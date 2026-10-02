@@ -58,7 +58,6 @@ gemm_fp16/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

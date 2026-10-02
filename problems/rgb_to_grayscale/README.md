@@ -54,7 +54,6 @@ rgb_to_grayscale/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

@@ -57,7 +57,6 @@ batched_matmul_fp16/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

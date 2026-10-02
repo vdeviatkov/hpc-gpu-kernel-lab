@@ -56,7 +56,6 @@ mean_squared_error/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

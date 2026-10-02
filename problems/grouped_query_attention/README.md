@@ -57,7 +57,6 @@ grouped_query_attention/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

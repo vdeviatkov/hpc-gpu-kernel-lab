@@ -55,7 +55,6 @@ stream_compaction/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

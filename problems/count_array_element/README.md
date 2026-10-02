@@ -54,7 +54,6 @@ count_array_element/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

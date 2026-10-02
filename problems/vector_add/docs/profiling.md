@@ -19,7 +19,7 @@ ncu --profile-from-start off --section SpeedOfLight --section MemoryWorkloadAnal
   --sizes 25000000 --dtypes fp16 --samples 1
 ```
 
-The [2×2 table in results](results.md#what-the-22-design-shows) uses these metrics:
+The [kernel comparison in results](results.md#why-the-variants-differ) uses these metrics:
 
 ```bash
 ncu --profile-from-start off --launch-count 1 --csv --metrics \

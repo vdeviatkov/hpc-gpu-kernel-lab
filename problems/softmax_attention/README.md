@@ -57,7 +57,6 @@ softmax_attention/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

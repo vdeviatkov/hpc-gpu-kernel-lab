@@ -54,7 +54,6 @@ max_pooling_2d/
     benchmarks/
     figures/
     docs/
-    results/
 ```
 
 ## Optimization roadmap

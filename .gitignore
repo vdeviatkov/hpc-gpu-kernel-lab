@@ -33,6 +33,7 @@ compile_commands.json
 
 # Generated benchmark and profiler outputs
 /artifacts/
+results/
 *.ncu-rep
 *.nsys-rep
 *.nsysqdrep

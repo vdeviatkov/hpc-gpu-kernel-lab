@@ -2,118 +2,20 @@
 
 import argparse
 import importlib
-import importlib.metadata
-import json
 import os
-import platform
 import random
-import statistics
-import subprocess
-import sys
-import time
-from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 
 import torch
 
+from lab.bench import add_relative_metrics, environment, measure, summarize, write_results
 from problems.vector_add import api
 
 # Device-to-device copy (one read and one write stream), measured per case as an
 # achievable-bandwidth reference. Its read/write mix differs from addition (1:1 vs 2:1),
 # so it is not a strict upper bound; --peak-gb-s records the sourced hardware ceiling.
 REFERENCE = "copy_reference"
-
-
-def summarize(samples):
-    if not samples or any(x <= 0 for x in samples):
-        raise ValueError("need positive latency samples")
-    ordered = sorted(samples)
-
-    def percentile(q):
-        index = (len(ordered) - 1) * q
-        lo = int(index)
-        hi = min(lo + 1, len(ordered) - 1)
-        return ordered[lo] + (ordered[hi] - ordered[lo]) * (index - lo)
-
-    return {
-        "p20": percentile(0.2),
-        "median": percentile(0.5),
-        "p50": percentile(0.5),
-        "p80": percentile(0.8),
-        "mean": statistics.mean(samples),
-        "stddev": statistics.pstdev(samples),
-    }
-
-
-def command(*args):
-    try:
-        result = subprocess.run(args, capture_output=True, text=True, check=True, timeout=15)
-        return result.stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        return None
-
-
-def environment(device):
-    props = torch.cuda.get_device_properties(device)
-    return {
-        "timestamp_utc": datetime.now(UTC).isoformat(),
-        "python": sys.version,
-        "os": platform.platform(),
-        "packages": {d.metadata["Name"]: d.version for d in importlib.metadata.distributions()},
-        "cuda_runtime": torch.version.cuda,
-        "cuda_toolkit": command("nvcc", "--version"),
-        "nvidia_smi": command(
-            "nvidia-smi", "--query-gpu=index,name,uuid,driver_version", "--format=csv,noheader"
-        ),
-        "gpu": props.name,
-        "device": device,
-        "uuid": str(props.uuid) if hasattr(props, "uuid") else None,
-        "compute_capability": [props.major, props.minor],
-        "sm_count": props.multi_processor_count,
-        "memory_bytes": props.total_memory,
-        "l2_bytes": getattr(props, "L2_cache_size", None),
-        "commit": command("git", "rev-parse", "HEAD"),
-        "git_status": command("git", "status", "--porcelain"),
-        "flags": {
-            k: os.environ.get(k)
-            for k in (
-                "CUDA_VISIBLE_DEVICES",
-                "CUDA_LAUNCH_BLOCKING",
-                "TORCH_CUDA_ARCH_LIST",
-                "XLA_PYTHON_CLIENT_PREALLOCATE",
-                "XLA_FLAGS",
-            )
-        },
-    }
-
-
-def measure(fn, sync, scope, warmup, samples):
-    result = fn()  # Build/JIT and allocator initialization are never timed.
-    sync(result)
-    for _ in range(warmup):
-        result = fn()
-    sync(result)
-    start = end = None
-    if scope == "device":
-        start, end = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
-        start.record()
-        end.record()
-        end.synchronize()  # Materialize events before the first measured call.
-    times = []
-    for _ in range(samples):
-        if scope == "device":
-            start.record()
-            result = fn()
-            end.record()
-            end.synchronize()
-            times.append(start.elapsed_time(end) * 1000)
-        else:
-            before = time.perf_counter_ns()
-            result = fn()
-            sync(result)
-            times.append((time.perf_counter_ns() - before) / 1000)
-    return times
 
 
 def parser():
@@ -272,35 +174,7 @@ def run(args):
                     row["cuda_vector_path"] = "vector" if aligned else "scalar_fallback"
                 rows.append(row)
                 print(f"{backend:18} {dtype_name} n={n:<10} {latency:.3f} us ({args.scope})")
-    for row in rows:
-        if row["status"] != "ok":
-            continue
-        reference = next(
-            (
-                r
-                for r in rows
-                if r.get("implementation") == REFERENCE
-                and r["shape"] == row["shape"]
-                and r["dtype"] == row["dtype"]
-            ),
-            None,
-        )
-        if reference and row is not reference:
-            row["fraction_of_copy"] = row["effective_gb_s"] / reference["effective_gb_s"]
-        baseline = next(
-            (
-                r
-                for r in rows
-                if r.get("implementation") == "pytorch"
-                and r["shape"] == row["shape"]
-                and r["dtype"] == row["dtype"]
-            ),
-            None,
-        )
-        if baseline and row["implementation"] != REFERENCE:
-            row["speedup_vs_pytorch"] = (
-                baseline["latency_us"]["median"] / row["latency_us"]["median"]
-            )
+    add_relative_metrics(rows, reference=REFERENCE)
     settings = vars(args).copy()
     settings["output"] = str(args.output)
     settings.update(
@@ -310,14 +184,7 @@ def run(args):
             "preallocated output" if args.scope == "device" else "output allocation included"
         ),
     )
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
-        json.dumps(
-            {"schema_version": 1, "environment": metadata, "settings": settings, "results": rows},
-            indent=2,
-        )
-        + "\n"
-    )
+    write_results(args.output, metadata, settings, rows)
 
 
 def main():

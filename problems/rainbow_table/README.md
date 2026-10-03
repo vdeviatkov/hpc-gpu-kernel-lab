@@ -41,17 +41,18 @@ Iterated hashing provides an integer-heavy contrast to bandwidth-dominated float
 
 CUDA receives the algorithm work; PyTorch supplies an exact/reference path. Triton and JAX are deferred because integer dependency analysis or irregular partitioning is the primary lesson, rather than backend coverage.
 
-Planned locations, created only when real work starts:
+Scaffold: every stub raises `NotImplementedError` until it is implemented.
+Run the tests with `python -m pytest problems/rainbow_table` and benchmark with
+`python -m lab.bench rainbow_table`.
 
 ```text
 rainbow_table/
-    README.md
-    cuda/
-    pytorch/
-    tests/
-    benchmarks/
-    figures/
-    docs/
+    README.md   study plan and status
+    api.py      public entry point and draft contract
+    cases.py    test and benchmark inputs, bytes and FLOPs
+    pytorch/    reference (stub)
+    cuda/       kernels.cu, bindings.cpp, implementation.py (stubs)
+    tests/      test_rainbow_table.py
 ```
 
 ## Optimization roadmap

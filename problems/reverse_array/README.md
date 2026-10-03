@@ -42,18 +42,19 @@ An in-place permutation forces ownership reasoning: each swap must have one writ
 
 CUDA and Triton provide useful low-level contrasts against PyTorch. JAX is deferred until it would answer a distinct compiler or performance question rather than duplicate coverage.
 
-Planned locations, created only when real work starts:
+Scaffold: every stub raises `NotImplementedError` until it is implemented.
+Run the tests with `python -m pytest problems/reverse_array` and benchmark with
+`python -m lab.bench reverse_array`.
 
 ```text
 reverse_array/
-    README.md
-    cuda/
-    triton/
-    pytorch/
-    tests/
-    benchmarks/
-    figures/
-    docs/
+    README.md   study plan and status
+    api.py      public entry point and draft contract
+    cases.py    test and benchmark inputs, bytes and FLOPs
+    pytorch/    reference (stub)
+    cuda/       kernels.cu, bindings.cpp, implementation.py (stubs)
+    triton/     Triton kernel (stub)
+    tests/      test_reverse_array.py
 ```
 
 ## Optimization roadmap

@@ -60,13 +60,13 @@ Missing hardware is a skip; compilation or correctness failures are failures.
 
 ## Repository organization
 
-Create `cuda/`, `triton/`, `pytorch/`, or `jax/` inside a problem when its first
-implementation exists. Add local `tests/`, `benchmarks/`, `docs/` and `figures/` as needed.
-Avoid empty source files and placeholder-only infrastructure directories.
+Each problem has a scaffold with `api.py`, `cases.py`, one stub per planned backend
+and tests; stubs raise `NotImplementedError`, so their tests skip until implemented.
+Add `docs/`, `figures/` and problem-specific `benchmarks/` when a study is measured.
 
-Extract common timing, correctness, environment, and CUDA helpers only after
-concrete reuse appears. Keep launches, allocations, ownership, and synchronization
-visible. Add shared scripts/build/CI only for actual executable work.
+Common timing, correctness, environment, input sampling and CUDA build helpers live
+in `lab/`. Keep launches, allocations, ownership, and synchronization visible in
+each problem's own code.
 
 ## Performance models
 

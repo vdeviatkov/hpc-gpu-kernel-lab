@@ -77,7 +77,14 @@ Status: ⬜ Planned · 🟨 In Progress · ✅ Complete · 🚀 Optimized.
 See the [testing methodology](docs/methodology.md),
 [benchmarking guidelines](docs/benchmarking.md), and
 [profiling workflow](docs/profiling.md) for the study process.
-Setup and execution commands are documented in each problem's `docs/` pages;
-[Vector Addition](problems/vector_add/README.md) is the reference layout.
+Every problem has a scaffold (contract, inputs, backend stubs and tests);
+[Vector Addition](problems/vector_add/README.md) is the completed reference.
+
+```bash
+python -m pip install -r requirements.txt
+python -m pytest -q                              # stubs skip until implemented
+python -m lab.bench relu                         # correctness-gated GPU benchmark
+python -m lab.report artifacts/relu.json         # Markdown summary
+```
 
 Contribution requirements are described in [CONTRIBUTING.md](CONTRIBUTING.md).

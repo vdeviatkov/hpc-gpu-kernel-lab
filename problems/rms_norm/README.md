@@ -44,19 +44,20 @@ RMSNorm is a flagship with a compact reduction-plus-scale structure. The source 
 
 JAX is included to examine XLA lowering/fusion or a meaningful high-level numerical baseline. A GPU comparison must use the same device, values, dtype, and completion scope.
 
-Planned locations, created only when real work starts:
+Scaffold: every stub raises `NotImplementedError` until it is implemented.
+Run the tests with `python -m pytest problems/rms_norm` and benchmark with
+`python -m lab.bench rms_norm`.
 
 ```text
 rms_norm/
-    README.md
-    cuda/
-    triton/
-    pytorch/
-    jax/
-    tests/
-    benchmarks/
-    figures/
-    docs/
+    README.md  study plan and status
+    api.py     public entry point and draft contract
+    cases.py   test and benchmark inputs, bytes and FLOPs
+    pytorch/   reference (stub)
+    cuda/      kernels.cu, bindings.cpp, implementation.py (stubs)
+    triton/    Triton kernel (stub)
+    jax/       JAX baseline (stub)
+    tests/     test_rms_norm.py
 ```
 
 ## Optimization roadmap

@@ -44,19 +44,20 @@ GQA is a flagship inference workload: sharing key/value heads can reduce memory 
 
 JAX is included to examine XLA lowering/fusion or a meaningful high-level numerical baseline. A GPU comparison must use the same device, values, dtype, and completion scope.
 
-Planned locations, created only when real work starts:
+Scaffold: every stub raises `NotImplementedError` until it is implemented.
+Run the tests with `python -m pytest problems/grouped_query_attention` and benchmark with
+`python -m lab.bench grouped_query_attention`.
 
 ```text
 grouped_query_attention/
-    README.md
-    cuda/
-    triton/
-    pytorch/
-    jax/
-    tests/
-    benchmarks/
-    figures/
-    docs/
+    README.md             study plan and status
+    api.py                public entry point and draft contract
+    cases.py              test and benchmark inputs, bytes and FLOPs
+    pytorch/              reference (stub)
+    cuda/                 kernels.cu, bindings.cpp, implementation.py (stubs)
+    triton/               Triton kernel (stub)
+    jax/                  JAX baseline (stub)
+    tests/                test_grouped_query_attention.py
 ```
 
 ## Optimization roadmap

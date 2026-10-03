@@ -42,19 +42,20 @@ A deliberate portfolio extension fills the gap between dot product and GEMM with
 
 JAX is included to examine XLA lowering/fusion or a meaningful high-level numerical baseline. A GPU comparison must use the same device, values, dtype, and completion scope.
 
-Planned locations, created only when real work starts:
+Scaffold: every stub raises `NotImplementedError` until it is implemented.
+Run the tests with `python -m pytest problems/dense_gemv` and benchmark with
+`python -m lab.bench dense_gemv`.
 
 ```text
 dense_gemv/
-    README.md
-    cuda/
-    triton/
-    pytorch/
-    jax/
-    tests/
-    benchmarks/
-    figures/
-    docs/
+    README.md  study plan and status
+    api.py     public entry point and draft contract
+    cases.py   test and benchmark inputs, bytes and FLOPs
+    pytorch/   reference (stub)
+    cuda/      kernels.cu, bindings.cpp, implementation.py (stubs)
+    triton/    Triton kernel (stub)
+    jax/       JAX baseline (stub)
+    tests/     test_dense_gemv.py
 ```
 
 ## Optimization roadmap

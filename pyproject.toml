@@ -1,5 +1,5 @@
 [tool.pytest.ini_options]
-testpaths = ["problems"]
+testpaths = ["lab", "problems"]
 addopts = "-ra"
 pythonpath = ["."]
 markers = ["gpu: requires an NVIDIA GPU", "jax: requires optional JAX"]

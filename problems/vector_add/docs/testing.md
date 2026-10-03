@@ -10,7 +10,7 @@ From the repository root, use Python 3.11+:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r problems/vector_add/requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 On Linux NVIDIA hosts, use a CUDA-enabled PyTorch wheel, matching driver/toolkit
@@ -31,8 +31,8 @@ to keep the build cache in the repository, and record any explicit
 
 ```bash
 python -m pytest -q problems/vector_add
-ruff check problems
-ruff format --check problems
+ruff check .
+ruff format --check .
 clang-format --dry-run --Werror problems/vector_add/cuda/*.{cpp,cu}
 ```
 
@@ -51,8 +51,8 @@ The reference adds FP32-converted inputs before rounding to the output dtype.
 Tolerances are explicit in [api.py](../api.py); guard/ownership checks are exact.
 Missing hardware or dependencies are explicit skips; build and correctness failures
 fail. Inspect skips on the target host before accepting results.
-[test_benchmark.py](../tests/test_benchmark.py) covers the percentile statistics
-and the timer's exclusion of initialization.
+[lab/tests/test_bench.py](../../../lab/tests/test_bench.py) covers the shared
+percentile statistics, the timer's exclusion of initialization and relative metrics.
 
 ## Compute Sanitizer
 

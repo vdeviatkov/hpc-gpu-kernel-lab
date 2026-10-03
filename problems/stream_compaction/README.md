@@ -43,18 +43,19 @@ Compaction composes predicates, prefixes, and scatter, closely resembling token 
 
 CUDA and Triton are useful for explicit memory ownership and scheduling. JAX is deferred: dynamic sizes or mutation would need a carefully matched functional contract before a fair XLA comparison.
 
-Planned locations, created only when real work starts:
+Scaffold: every stub raises `NotImplementedError` until it is implemented.
+Run the tests with `python -m pytest problems/stream_compaction` and benchmark with
+`python -m lab.bench stream_compaction`.
 
 ```text
 stream_compaction/
-    README.md
-    cuda/
-    triton/
-    pytorch/
-    tests/
-    benchmarks/
-    figures/
-    docs/
+    README.md       study plan and status
+    api.py          public entry point and draft contract
+    cases.py        test and benchmark inputs, bytes and FLOPs
+    pytorch/        reference (stub)
+    cuda/           kernels.cu, bindings.cpp, implementation.py (stubs)
+    triton/         Triton kernel (stub)
+    tests/          test_stream_compaction.py
 ```
 
 ## Optimization roadmap

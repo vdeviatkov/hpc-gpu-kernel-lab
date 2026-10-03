@@ -41,18 +41,19 @@ This extension computes scales and quantizes values, beyond the catalog dequanti
 
 CUDA and Triton provide useful low-level contrasts against PyTorch. JAX is deferred until it would answer a distinct compiler or performance question rather than duplicate coverage.
 
-Planned locations, created only when real work starts:
+Scaffold: every stub raises `NotImplementedError` until it is implemented.
+Run the tests with `python -m pytest problems/quantization_pipeline` and benchmark with
+`python -m lab.bench quantization_pipeline`.
 
 ```text
 quantization_pipeline/
-    README.md
-    cuda/
-    triton/
-    pytorch/
-    tests/
-    benchmarks/
-    figures/
-    docs/
+    README.md           study plan and status
+    api.py              public entry point and draft contract
+    cases.py            test and benchmark inputs, bytes and FLOPs
+    pytorch/            reference (stub)
+    cuda/               kernels.cu, bindings.cpp, implementation.py (stubs)
+    triton/             Triton kernel (stub)
+    tests/              test_quantization_pipeline.py
 ```
 
 ## Optimization roadmap

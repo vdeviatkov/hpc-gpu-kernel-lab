@@ -42,19 +42,20 @@ This extension adds a real inference epilogue rather than another GEMM precision
 
 JAX is included to examine XLA lowering/fusion or a meaningful high-level numerical baseline. A GPU comparison must use the same device, values, dtype, and completion scope.
 
-Planned locations, created only when real work starts:
+Scaffold: every stub raises `NotImplementedError` until it is implemented.
+Run the tests with `python -m pytest problems/fused_gemm_epilogue` and benchmark with
+`python -m lab.bench fused_gemm_epilogue`.
 
 ```text
 fused_gemm_epilogue/
-    README.md
-    cuda/
-    triton/
-    pytorch/
-    jax/
-    tests/
-    benchmarks/
-    figures/
-    docs/
+    README.md         study plan and status
+    api.py            public entry point and draft contract
+    cases.py          test and benchmark inputs, bytes and FLOPs
+    pytorch/          reference (stub)
+    cuda/             kernels.cu, bindings.cpp, implementation.py (stubs)
+    triton/           Triton kernel (stub)
+    jax/              JAX baseline (stub)
+    tests/            test_fused_gemm_epilogue.py
 ```
 
 ## Optimization roadmap

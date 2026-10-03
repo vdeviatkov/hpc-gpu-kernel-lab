@@ -42,18 +42,19 @@ This extension starts with precomputed expert assignments and builds counting, o
 
 CUDA and Triton are useful for explicit memory ownership and scheduling. JAX is deferred: dynamic sizes or mutation would need a carefully matched functional contract before a fair XLA comparison.
 
-Planned locations, created only when real work starts:
+Scaffold: every stub raises `NotImplementedError` until it is implemented.
+Run the tests with `python -m pytest problems/moe_token_routing` and benchmark with
+`python -m lab.bench moe_token_routing`.
 
 ```text
 moe_token_routing/
-    README.md
-    cuda/
-    triton/
-    pytorch/
-    tests/
-    benchmarks/
-    figures/
-    docs/
+    README.md       study plan and status
+    api.py          public entry point and draft contract
+    cases.py        test and benchmark inputs, bytes and FLOPs
+    pytorch/        reference (stub)
+    cuda/           kernels.cu, bindings.cpp, implementation.py (stubs)
+    triton/         Triton kernel (stub)
+    tests/          test_moe_token_routing.py
 ```
 
 ## Optimization roadmap

@@ -44,7 +44,7 @@ PyTorch on an NVIDIA host. See [testing](docs/testing.md#setup) for toolchain de
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-python -m pip install -r problems/vector_add/requirements.txt
+python -m pip install -r requirements.txt
 python -m pytest -q problems/vector_add
 ```
 
@@ -71,7 +71,7 @@ vector_add/
 ├── pytorch/             eager baseline
 ├── jax/                 JAX baseline (native arrays)
 ├── tests/               correctness and benchmark-statistics tests
-├── benchmarks/          run.py, report.py, plot.py, sweep.sh
+├── benchmarks/          custom runner (run.py), plot.py, sweep.sh
 ├── figures/             generated charts (tracked)
 └── docs/                design, results, testing, benchmarking, profiling
 ```

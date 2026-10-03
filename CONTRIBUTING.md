@@ -3,8 +3,9 @@
 Read the problem's source, prerequisites, and proposed experiments. Define the
 contract, then follow the [implementation and testing methodology](docs/methodology.md),
 [benchmarking plan](docs/benchmarking.md), and [profiling plan](docs/profiling.md).
-Create backend directories only when real work starts. Keep baselines and name
-variants for their mechanism; do not copy source statements or solutions.
+Every problem starts from a generated scaffold whose stubs raise
+`NotImplementedError`. Keep baselines and name variants for their mechanism; do
+not copy source statements or solutions.
 
 ## Status
 
@@ -25,16 +26,18 @@ Until measured, write **Results pending hardware benchmark**.
 ## Problem layout
 
 Problem directories use plain importable names (`problems/vector_add`); the
-roadmap table owns the numbering. A started study follows the
-[Vector Addition](problems/vector_add/README.md) layout:
+roadmap table owns the numbering. Shared code lives in `lab/` (dispatch, input
+sampling, test helpers, benchmark harness and report). A completed study follows
+the [Vector Addition](problems/vector_add/README.md) layout:
 
 ```text
 <problem>/
 ├── README.md        overview: status, headline chart, key results, quick start, page map
-├── api.py           validated public entry point
-├── cuda/ triton/ pytorch/ jax/   one directory per backend actually implemented
-├── tests/           correctness and benchmark-statistics tests
-├── benchmarks/      run.py, report.py, plot.py, sweep.sh
+├── api.py           public entry point: contract, BACKENDS, DTYPES, TOLERANCES
+├── cases.py         test/benchmark inputs, logical bytes and FLOPs
+├── pytorch/ cuda/ triton/ jax/   one directory per planned backend
+├── tests/           correctness tests against the PyTorch reference
+├── benchmarks/      optional: problem-specific runners, plots, sweeps
 ├── figures/         generated charts (tracked)
 └── docs/
     ├── design.md        source, contract, variants, performance model
@@ -44,8 +47,9 @@ roadmap table owns the numbering. A started study follows the
     └── profiling.md     profiler commands and what they test
 ```
 
-Keep the README short; detail belongs in `docs/`. Each docs page starts with the
-same navigation line.
+Keep the README short; detail belongs in `docs/`, `figures/` and `benchmarks/`,
+which are added when a study is measured. Each docs page starts with the same
+navigation line.
 
 ## Checks
 

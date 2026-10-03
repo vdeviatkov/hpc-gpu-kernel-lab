@@ -9,7 +9,7 @@ Lab-wide rules are in the [benchmark policy](../../../docs/benchmarking.md).
 
 ```bash
 python -m problems.vector_add.benchmarks.run --peak-gb-s 960 --output artifacts/vector_add.json
-python -m problems.vector_add.benchmarks.report artifacts/vector_add.json
+python -m lab.report artifacts/vector_add.json
 ```
 
 Each backend passes correctness before warmup/timing. Default sizes are 1, 1025,

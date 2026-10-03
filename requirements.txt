@@ -1,0 +1,7 @@
+# Install a CUDA-enabled PyTorch wheel separately on NVIDIA hosts.
+torch>=2.5
+pytest>=8
+ruff>=0.9
+ninja>=1.11
+# Optional: triton (Linux NVIDIA), jax[cuda12] or jax[cuda13] per your toolkit,
+# and matplotlib>=3.8 for problems/vector_add/benchmarks/plot.py.

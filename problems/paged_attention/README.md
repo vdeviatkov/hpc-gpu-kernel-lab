@@ -42,18 +42,19 @@ Paged attention combines online normalization with noncontiguous K/V storage and
 
 CUDA and Triton are useful for explicit memory ownership and scheduling. JAX is deferred: dynamic sizes or mutation would need a carefully matched functional contract before a fair XLA comparison.
 
-Planned locations, created only when real work starts:
+Scaffold: every stub raises `NotImplementedError` until it is implemented.
+Run the tests with `python -m pytest problems/paged_attention` and benchmark with
+`python -m lab.bench paged_attention`.
 
 ```text
 paged_attention/
-    README.md
-    cuda/
-    triton/
-    pytorch/
-    tests/
-    benchmarks/
-    figures/
-    docs/
+    README.md     study plan and status
+    api.py        public entry point and draft contract
+    cases.py      test and benchmark inputs, bytes and FLOPs
+    pytorch/      reference (stub)
+    cuda/         kernels.cu, bindings.cpp, implementation.py (stubs)
+    triton/       Triton kernel (stub)
+    tests/        test_paged_attention.py
 ```
 
 ## Optimization roadmap

@@ -1,0 +1,30 @@
+// 09 · 1D Convolution: CUDA kernels. Not implemented yet.
+// Fill in conv1d_kernel and launch_conv1d, then set IMPLEMENTED = True in implementation.py.
+// See problems/vector_add/cuda/kernels.cu for a complete example.
+#include <ATen/ATen.h>
+#include <ATen/Dispatch.h>
+#include <c10/cuda/CUDAException.h>
+#include <c10/cuda/CUDAGuard.h>
+#include <c10/cuda/CUDAStream.h>
+#include <cuda_runtime.h>
+
+#include <cstdint>
+
+template <typename T>
+__global__ void conv1d_kernel(const T *__restrict__ x, const T *__restrict__ w, T *__restrict__ out,
+                              int64_t n, int64_t k) {
+  // TODO: implement.
+}
+
+void launch_conv1d(const at::Tensor &x, const at::Tensor &w, at::Tensor out) {
+  const c10::cuda::CUDAGuard guard(x.device());
+  const cudaStream_t stream = c10::cuda::getCurrentCUDAStream(x.get_device()).stream();
+  const int64_t n = x.numel();
+  const int64_t k = w.numel();
+  // TODO: choose a grid, dispatch on dtype (AT_DISPATCH_FLOATING_TYPES_AND2(at::kHalf,
+  // at::kBFloat16, ...)), and launch conv1d_kernel on `stream`, then call
+  // C10_CUDA_KERNEL_LAUNCH_CHECK().
+  (void)stream;
+  (void)n, (void)k;
+  TORCH_CHECK(false, "conv1d: CUDA kernel not implemented");
+}

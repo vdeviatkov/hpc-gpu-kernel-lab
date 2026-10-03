@@ -6,10 +6,7 @@ memory throughput, then tests what vectorized access and grid-stride loops each 
 **Status:** ✅ Complete · validated and measured on NVIDIA GeForce RTX 5080 ·
 primary lesson: **launch overhead vs bandwidth** · no prerequisites.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="figures/bandwidth_vs_size_dark.svg">
-  <img alt="Effective bandwidth vs working-set size on RTX 5080 for PyTorch, CUDA scalar, CUDA vector and Triton, FP32 and FP16. Bandwidth rises linearly with size while launch-bound, peaks near 3 TB/s while the working set fits in the 64 MiB L2, and settles near 840 GB/s once it streams from DRAM." src="figures/bandwidth_vs_size_light.svg">
-</picture>
+![Effective bandwidth vs working-set size on RTX 5080 for PyTorch, CUDA scalar, CUDA vector and Triton, FP32 and FP16. Bandwidth rises linearly with size while launch-bound, peaks near 3 TB/s while the working set fits in the 64 MiB L2, and settles near 840 GB/s once it streams from DRAM.](figures/bandwidth_vs_size.svg)
 
 ## Key results
 

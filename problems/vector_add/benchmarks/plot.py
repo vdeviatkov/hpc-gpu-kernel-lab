@@ -3,7 +3,8 @@
 python -m problems.vector_add.benchmarks.plot sizes_fp32.json sizes_fp16.json \
     --output-dir problems/vector_add/figures
 
-Writes light and dark SVG variants for a README <picture> element.
+Writes one SVG with its own light background, so it reads the same in light and
+dark viewers.
 """
 
 import argparse
@@ -17,22 +18,15 @@ import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.ticker import FuncFormatter  # noqa: E402
 
 SERIES = ("pytorch", "cuda_scalar", "cuda_vec", "triton")
-THEMES = {
-    "light": {
-        "surface": "#fcfcfb",
-        "text": "#0b0b0b",
-        "muted": "#52514e",
-        "grid": "#e4e3df",
-        "series": ("#2a78d6", "#eb6834", "#1baf7a", "#eda100"),
-    },
-    "dark": {
-        "surface": "#1a1a19",
-        "text": "#ffffff",
-        "muted": "#c3c2b7",
-        "grid": "#383835",
-        "series": ("#3987e5", "#d95926", "#199e70", "#c98500"),
-    },
+STYLE = {
+    "surface": "#fcfcfb",
+    "text": "#0b0b0b",
+    "muted": "#52514e",
+    "grid": "#e4e3df",
+    "series": ("#2a78d6", "#eb6834", "#1baf7a", "#eda100"),
 }
+# PyTorch overlaps cuda_vec almost everywhere: draw it dashed and on top so both stay visible.
+LINESTYLE = {"pytorch": (0, (5, 3))}
 
 
 def load(path):
@@ -55,10 +49,10 @@ def size_label(value, _):
     return f"{value:g} B"
 
 
-def plot(panels, theme, output):
-    t = THEMES[theme]
+def plot(panels, output):
+    t = STYLE
     plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10, "svg.fonttype": "path"})
-    fig, axes = plt.subplots(1, len(panels), figsize=(5.2 * len(panels), 4.2), sharey=True)
+    fig, axes = plt.subplots(1, len(panels), figsize=(5.2 * len(panels), 3.9), sharey=True)
     fig.patch.set_facecolor(t["surface"])
     axes = [axes] if len(panels) == 1 else axes
     _, _, env, settings = panels[0]
@@ -86,7 +80,17 @@ def plot(panels, theme, output):
         for name, color in zip(SERIES, t["series"], strict=True):
             if name in curves:
                 x, y = zip(*curves[name], strict=True)
-                ax.plot(x, y, color=color, linewidth=2, marker="o", markersize=4.5, label=name)
+                ax.plot(
+                    x,
+                    y,
+                    color=color,
+                    linewidth=2,
+                    linestyle=LINESTYLE.get(name, "-"),
+                    marker="o",
+                    markersize=4.5,
+                    label=name,
+                    zorder=4 if name == "pytorch" else 3,
+                )
         ax.set_title(dtype.upper(), loc="left", color=t["text"], fontsize=11, fontweight="bold")
         ax.set_xlabel("Working set (A + B + C)", color=t["muted"], fontsize=9)
     axes[0].set_ylabel("Effective GB/s (log)", color=t["muted"], fontsize=9)
@@ -95,7 +99,7 @@ def plot(panels, theme, output):
         handles,
         labels,
         loc="upper left",
-        bbox_to_anchor=(0.005, 0.935),
+        bbox_to_anchor=(0.005, 0.945),
         ncol=len(labels),
         frameon=False,
         fontsize=9,
@@ -110,7 +114,7 @@ def plot(panels, theme, output):
         fontsize=12,
         fontweight="bold",
     )
-    fig.tight_layout(rect=(0, 0, 1, 0.87))
+    fig.tight_layout(rect=(0, 0, 1, 0.9))
     fig.savefig(output, facecolor=t["surface"])
     plt.close(fig)
 
@@ -122,5 +126,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     panels = [load(p) for p in args.inputs]
-    for theme in THEMES:
-        plot(panels, theme, args.output_dir / f"bandwidth_vs_size_{theme}.svg")
+    plot(panels, args.output_dir / "bandwidth_vs_size.svg")

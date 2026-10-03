@@ -6,17 +6,22 @@ memory throughput, then tests what vectorized access and grid-stride loops each 
 **Status:** ✅ Complete · validated and measured on NVIDIA GeForce RTX 5080 ·
 primary lesson: **launch overhead vs bandwidth** · no prerequisites.
 
-![Effective bandwidth vs working-set size on RTX 5080 for PyTorch, CUDA scalar, CUDA vector and Triton, FP32 and FP16. Bandwidth rises linearly with size while launch-bound, peaks near 3 TB/s while the working set fits in the 64 MiB L2, and settles near 840 GB/s once it streams from DRAM.](figures/bandwidth_vs_size.svg)
+![Effective bandwidth vs working-set size on RTX 5080 for PyTorch, CUDA scalar, CUDA vector and Triton, FP32 and FP16. Bandwidth rises linearly with size while launch-bound, peaks near 3 TB/s while the working set fits in the 64 MiB L2 and stays cached between calls, and settles near 840 GB/s, below the 960 GB/s DRAM peak, once it streams from DRAM.](figures/bandwidth_vs_size.svg)
+
+The benchmark reuses the same buffers on every call. Below 64 MiB they stay in the L2
+cache, so the shaded region measures warm-cache speed, which can exceed the DRAM peak;
+inputs arriving from DRAM would be slower there. The DRAM peak applies right of the L2 line.
 
 ## Key results
 
-RTX 5080, spec peak 960 GB/s. Full tables, profiler evidence and caveats are in
+RTX 5080, DRAM peak 960 GB/s. Full tables, profiler evidence and caveats are in
 [results](docs/results.md).
 
 - **Three regimes.** Below ~1 MB, each call costs ~8.3 µs regardless of size
-  (launch-bound; Triton ~13.7 µs). While A + B + C fits in the 64 MiB L2, effective
-  bandwidth reaches ~3 TB/s. Beyond it, every backend streams from DRAM at
-  816–863 GB/s at N = 25M, which is 85–90% of the spec peak.
+  (launch-bound; Triton ~13.7 µs). While A + B + C fits in the 64 MiB L2, it stays
+  cached between calls and effective bandwidth reaches ~3 TB/s (warm cache, not DRAM).
+  Beyond it, every backend streams from DRAM at 816–863 GB/s at N = 25M, which is
+  85–90% of the DRAM peak.
 - **16-byte vector access matters for 2-byte types.** At N = 25M FP16, `cuda_vec`
   takes 173.7 µs vs 183.8 µs for `cuda_scalar` (−5.5%) and 177.6 µs for PyTorch.
   Instructions fall 72% and DRAM throughput rises from 88.5% to 92.6%.

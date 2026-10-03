@@ -23,8 +23,11 @@ STYLE = {
     "text": "#0b0b0b",
     "muted": "#52514e",
     "grid": "#e4e3df",
+    "band": "#f0efec",
     "series": ("#2a78d6", "#eb6834", "#1baf7a", "#eda100"),
 }
+# Below ~1 MB calls are launch-bound; from here to the L2 capacity the cache is warm.
+WARM_L2_START = 1e6
 # PyTorch overlaps cuda_vec almost everywhere: draw it dashed and on top so both stay visible.
 LINESTYLE = {"pytorch": (0, (5, 3))}
 
@@ -69,14 +72,35 @@ def plot(panels, output):
         ax.tick_params(colors=t["muted"], length=0, labelsize=9)
         ax.xaxis.set_major_formatter(FuncFormatter(size_label))
         ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
-        if peak:
-            ax.axhline(peak, color=t["muted"], linewidth=1, linestyle=(0, (4, 3)))
-            ax.text(1.3e4, peak * 1.12, f"Spec peak {peak:g} GB/s", color=t["muted"], fontsize=8.5)
+        sizes = [x for points in curves.values() for x, _ in points]
+        left, right = min(sizes) / 1.6, max(sizes) * 1.6
         if l2:
+            # Inputs are reused without flushing, so working sets below the L2 capacity are
+            # served from a warm cache rather than DRAM.
+            ax.axvspan(WARM_L2_START, l2, color=t["band"], zorder=0, linewidth=0)
             ax.axvline(l2, color=t["muted"], linewidth=1, linestyle=(0, (1, 2.5)))
             ax.text(l2 * 1.12, 1.6, f"L2 {l2 / 2**20:g} MiB", color=t["muted"], fontsize=8.5)
-            for x, label in ((3e4, "launch-bound"), (4e6, "L2-resident"), (l2 * 1.6, "DRAM")):
-                ax.text(x, 0.45, label, color=t["muted"], fontsize=8.5, style="italic")
+            regions = (
+                (3e4, "launch-bound"),
+                ((WARM_L2_START * l2) ** 0.5, "warm L2\n(inputs cached)"),
+                ((l2 * right) ** 0.5, "DRAM"),
+            )
+            for x, label in regions:
+                ax.text(x, 0.45, label, color=t["muted"], fontsize=8.5, style="italic", ha="center")
+        if peak:
+            # The spec peak bounds DRAM traffic only, so draw it over the DRAM region.
+            start = l2 or WARM_L2_START
+            ax.hlines(peak, start, right, color=t["muted"], linewidth=1, linestyle=(0, (4, 3)))
+            ax.text(
+                (start * right) ** 0.5,
+                peak / 1.35,
+                f"DRAM peak\n{peak:g} GB/s",
+                color=t["muted"],
+                fontsize=8.5,
+                ha="center",
+                va="top",
+            )
+        ax.set_xlim(left, right)
         for name, color in zip(SERIES, t["series"], strict=True):
             if name in curves:
                 x, y = zip(*curves[name], strict=True)

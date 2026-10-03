@@ -62,7 +62,7 @@ reads and one write. Arithmetic intensity is `1/(3*s)` FLOP/byte, or 1/12
 for FP32. At N = 25,000,000, logical traffic is 300 MB for FP32.
 
 At a bandwidth ceiling W bytes/s, `3*N*s/W` is an optimistic memory-time bound.
-The RTX 5080's spec ceiling is 960 GB/s (16 GB GDDR7, 256-bit bus at 30 Gbps), so
+The RTX 5080's DRAM spec ceiling is 960 GB/s (16 GB GDDR7, 256-bit bus at 30 Gbps), so
 25M FP32 elements need at least 312.5 µs. Effective GB/s is `3*N*s / seconds / 1e9`,
 not measured DRAM traffic. There is no data reuse to justify shared memory and no
 Tensor Core operation here.
@@ -70,7 +70,7 @@ Tensor Core operation here.
 Every benchmark case also times a device-to-device `Tensor.copy_` (`copy_reference`)
 as a measured bandwidth reference. Copy is half writes, while addition is one third
 writes, so copy is **not** a strict upper bound: for FP32 at 25M elements, addition
-(846 GB/s) beats copy (817 GB/s). The spec peak is the ceiling; the copy reference
+(846 GB/s) beats copy (817 GB/s). The DRAM spec peak is the ceiling; the copy reference
 shows what a vendor-tuned streaming operation achieves on the same buffers.
 
 ## References

@@ -3,7 +3,7 @@
 [← Vector Addition](../README.md) · [Design](design.md) · **Results** ·
 [Testing](testing.md) · [Benchmarking](benchmarking.md) · [Profiling](profiling.md)
 
-**Setup:** NVIDIA RTX 5080 (64 MiB L2, spec peak 960 GB/s), CUDA 13.2, PyTorch 2.14.1,
+**Setup:** NVIDIA RTX 5080 (64 MiB L2, DRAM peak 960 GB/s), CUDA 13.2, PyTorch 2.14.1,
 Triton 3.8.0, JAX 0.11.2, stock clocks. Each number is the median of 100 samples after
 25 warmups, taken as the median of three full runs (spread between runs ≤ 0.4%).
 Timing uses CUDA events around one call. Commands are in [benchmarking](benchmarking.md).
@@ -54,8 +54,10 @@ PyTorch and all CUDA kernels, **13.7 µs** for Triton. The kernel itself runs fo
 0.6 µs (Nsight Systems); the rest is launch and dispatch overhead. Including allocation
 and synchronization, JAX takes 23.6 µs.
 
-Between these two extremes, the three buffers fit in the 64 MiB L2 cache, and effective
-bandwidth reaches about 3 TB/s (see the [overview chart](../README.md)).
+Between these two extremes, the three buffers fit in the 64 MiB L2 cache and stay there,
+because the benchmark reuses them on every call. Effective bandwidth then reaches about
+3 TB/s, above the 960 GB/s DRAM peak, because the data never goes to DRAM
+(see the [overview chart](../README.md)). This is a warm-cache best case.
 
 ## Validation
 

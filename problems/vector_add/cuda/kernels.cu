@@ -26,6 +26,13 @@ template <typename T> struct alignas(16) Pack {
   T v[kSize];
 };
 
+// Reading T arrays through Pack<T> pointers is technically undefined behavior in ISO C++
+// (strict aliasing: no Pack<T> object exists at those addresses). It is nevertheless the
+// standard CUDA idiom for vector access, the same pattern as NVIDIA's float4 casts and
+// PyTorch's aligned_vector, and nvcc compiles it as intended: one LDG.E.128/STG.E.128 per
+// pack, verified in SASS. Alignment is not assumed: the launcher checks it at runtime and
+// falls back to scalar kernels. A memcpy into Pack<T> would be well-defined, but must be
+// re-verified in SASS to still produce 128-bit accesses.
 template <typename T>
 __device__ __forceinline__ void add_pack(const T *__restrict__ a, const T *__restrict__ b,
                                          T *__restrict__ out, int64_t i) {

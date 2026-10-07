@@ -15,8 +15,10 @@ def device():
     return "cuda" if CUDA else "cpu"
 
 
-def skip_if_unavailable(backend):
+def skip_if_unavailable(backend, api=None):
     """Skip explicitly when hardware or an optional package is missing."""
+    if api is not None:
+        backend = dispatch.resolve(api, backend)[0]
     if backend in dispatch.GPU_BACKENDS and not CUDA:
         pytest.skip("NVIDIA GPU unavailable")
     if backend == "triton" and importlib.util.find_spec("triton") is None:
@@ -48,7 +50,7 @@ def check_against_reference(api, cases, backend, case, dtype_name, seed=0):
     Inputs are cloned per call; unless the problem declares MUTATES, the inputs
     must also come back unchanged.
     """
-    skip_if_unavailable(backend)
+    skip_if_unavailable(backend, api)
     dtype = api.DTYPES[dtype_name]
     skip_unsupported_dtype(dtype)
     inputs = cases.make_inputs(case, Sampler(dtype, device(), seed))

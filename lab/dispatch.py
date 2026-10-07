@@ -3,6 +3,9 @@
 Backend modules live at problems/<problem>/<backend>/implementation.py and define a
 function with the same name as the api function. They are imported only when
 selected, so optional compilers (nvcc, Triton, JAX) are never required up front.
+
+An api may also define VARIANTS = {"cuda_vec": ("cuda", {"variant": 3}), ...}: each
+named backend then calls a module backend with fixed keyword options.
 """
 
 from importlib import import_module
@@ -33,10 +36,17 @@ def _from_jax(value):
     return value
 
 
+def resolve(api, backend):
+    """Map a named backend to (module backend, fixed options)."""
+    return getattr(api, "VARIANTS", {}).get(backend, (backend, {}))
+
+
 def call(api, function, backend, *args, **options):
     """Validate the backend name and device placement, then call the implementation."""
     if backend not in api.BACKENDS:
         raise ValueError(f"unknown backend: {backend}; choose from {', '.join(api.BACKENDS)}")
+    backend, fixed = resolve(api, backend)
+    options = {**fixed, **options}
     tensors = _tensors(args)
     if backend in GPU_BACKENDS and any(
         t.device.type != "cuda" or torch.version.cuda is None for t in tensors

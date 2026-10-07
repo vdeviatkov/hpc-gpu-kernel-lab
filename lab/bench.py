@@ -168,6 +168,35 @@ def case_label(case):
     return ",".join(f"{k}={v}" for k, v in case.items())
 
 
+COPY_REFERENCE = "copy_reference"
+
+
+def time_copy_reference(row, inputs, args, sync):
+    """Time a device-to-device copy of the first tensor input (one read, one write stream).
+
+    A practical bandwidth target for problems that move about as many bytes as a copy.
+    Like the backends, it includes allocation of the destination.
+    """
+    source = next(a for a in inputs if isinstance(a, torch.Tensor))
+    values = measure(source.clone, sync, args.scope, args.warmup, args.samples)
+    latency = summarize(values)
+    nbytes = 2 * source.numel() * source.element_size()
+    row.update(
+        status="ok",
+        raw_latency_us=values,
+        latency_us=latency,
+        logical_bytes=nbytes,
+        effective_gb_s=nbytes / latency["median"] / 1000,
+    )
+    if args.peak_gb_s:
+        row["fraction_of_peak"] = row["effective_gb_s"] / args.peak_gb_s
+    print(
+        f"{COPY_REFERENCE:22} {row['dtype']} {case_label(row['case']):28} "
+        f"{latency['median']:.3f} us ({args.scope})"
+    )
+    return row
+
+
 def run_problem(args):
     """Correctness-gated timing of every requested backend on every benchmark case."""
     api = importlib.import_module(f"problems.{args.problem}.api")
@@ -200,9 +229,14 @@ def run_problem(args):
                 print(f"{args.problem} {dtype_name} {case_label(case)}: no PyTorch reference")
                 continue
             order = list(backends)
+            if args.copy_reference:
+                order.append(COPY_REFERENCE)
             rng.shuffle(order)
             for backend in order:
                 row = {**base, "implementation": backend, "scope": args.scope}
+                if backend == COPY_REFERENCE:
+                    rows.append(time_copy_reference(row, inputs, args, sync))
+                    continue
                 if backend == "jax" and args.scope == "device":
                     reason = "JAX runs on its own stream; use --scope api"
                     rows.append({**row, "status": "skipped", "reason": reason})
@@ -237,7 +271,7 @@ def run_problem(args):
                     f"{backend:22} {dtype_name} {case_label(case):28} "
                     f"{latency['median']:.3f} us ({args.scope})"
                 )
-    add_relative_metrics(rows)
+    add_relative_metrics(rows, reference=COPY_REFERENCE if args.copy_reference else None)
     settings = {**vars(args), "output": str(args.output)}
     settings.update(
         cache_policy="reused inputs; no flushing",
@@ -260,6 +294,11 @@ def parser():
     p.add_argument("--seed", type=int, default=2026)
     p.add_argument("--peak-gb-s", type=float, default=None, help="sourced DRAM bandwidth")
     p.add_argument("--notes", default="", help="clocks, power, thermal state, other GPU users")
+    p.add_argument(
+        "--copy-reference",
+        action="store_true",
+        help="also time a device copy of the first input and report %% of copy",
+    )
     p.add_argument("--output", type=Path, help="default: artifacts/<problem>.json")
     return p
 

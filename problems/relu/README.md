@@ -1,97 +1,71 @@
 # 02 · ReLU
 
-## Source
+`out[i] = max(0, x[i])`: a one-instruction kernel for studying how the compiler lowers a
+condition (branch or predication) and how much load width matters once the arithmetic is
+trivial.
 
-LeetGPU: [ReLU](https://leetgpu.com/challenges/relu)
+**Status:** ✅ Complete · validated and measured on NVIDIA GeForce RTX 5080 ·
+primary lesson: **predication and branching** · prerequisite:
+[01 · Vector Addition](../vector_add/README.md).
 
-Catalog title and difficulty verified on 2026-09-12.
+![ReLU speed relative to a device copy at N = 25M on RTX 5080. FP32: every backend reaches 97.6–99.6% of copy speed. FP16: PyTorch 99.3%, cuda_vec 96.5% and Triton 95.5%, while the scalar CUDA kernels reach only 84–86.5%.](figures/relu_vs_copy.svg)
 
-This is an original study plan, not a reproduction of the source statement.
-For LeetGPU work, confirm the current signature, layout, dtype, and boundary
-contract on the linked page before writing a reference. Any broader lab variant
-must be labeled separately.
+## Key results
 
-## Prerequisites
+RTX 5080, N = 25M. A device copy of the same tensor moves the same bytes, so it is the
+practical speed limit. Details are in [results](docs/results.md).
 
-[01 · Vector Addition](../vector_add/README.md)
+- **The compiler never branches.** Even an explicit `if/else` becomes predicated
+  instructions; Nsight Compute finds no data-dependent divergent branches in any variant
+  or sign pattern.
+- **FP32: the formula does not matter.** Every backend runs at 97.6–99.6% of copy speed.
+- **FP16/BF16: load width matters.** Scalar kernels move 2 bytes per access and leave
+  DRAM only ~67% busy (84–87% of copy speed); 16-byte loads (`cuda_vec`, Triton,
+  PyTorch) reach 95.5–99.3%.
+- **`if/else` costs ~1.3% when signs mix inside a warp.** It compiles to two predicated
+  stores, so a mixed warp issues two store instructions instead of one.
 
-## Difficulty
+## Documentation
 
-- LeetGPU: **Easy**.
+| Page | Contents |
+|---|---|
+| [Design](docs/design.md) | Source contract, edge-case policy, performance model, the variants |
+| [Results](docs/results.md) | Latency per backend, why the variants differ, sign patterns, small inputs, limitations |
+| [Testing](docs/testing.md) | Test cases, running the suite, Compute Sanitizer |
+| [Benchmarking](docs/benchmarking.md) | Commands, copy reference, reproduction sweep |
+| [Profiling](docs/profiling.md) | Capturing one launch, Nsight metrics, reading SASS |
 
-## Why this problem matters
+## Quick start
 
-A simple activation makes it possible to inspect branch lowering without hiding behavior inside a larger fused operator.
+From the repository root, after [setup](../vector_add/docs/testing.md#setup):
 
-## Primary lesson
+```bash
+python -m pytest -q problems/relu
+python -m lab.bench relu --copy-reference --peak-gb-s 960
+```
 
-**Predication and branching**
+```python
+import torch
 
-## Primary concepts
+from problems.relu.api import relu
 
-- Indexing
-- Branching and predication
-- Instruction mix
+x = torch.randn(1025, device="cuda")
+# Backends: pytorch, cuda_select, cuda_branch, cuda_fmax, cuda_vec, triton
+y = relu(x, backend="cuda_vec")
+```
 
-## Planned implementations
-
-- [ ] PyTorch correctness reference and meaningful baseline
-- [ ] CUDA straightforward baseline
-- [ ] CUDA named optimization variants
-- [ ] Triton implementation with explicit tile/warp choices
-
-CUDA and Triton provide useful low-level contrasts against PyTorch. JAX is deferred until it would answer a distinct compiler or performance question rather than duplicate coverage.
-
-Scaffold: every stub raises `NotImplementedError` until it is implemented.
-Run the tests with `python -m pytest problems/relu` and benchmark with
-`python -m lab.bench relu`.
+## Layout
 
 ```text
 relu/
-    README.md  study plan and status
-    api.py     public entry point and draft contract
-    cases.py   test and benchmark inputs, bytes and FLOPs
-    pytorch/   reference (stub)
-    cuda/      kernels.cu, bindings.cpp, implementation.py (stubs)
-    triton/    Triton kernel (stub)
-    tests/     test_relu.py
+├── README.md        overview (this page)
+├── api.py           public entry point, contract, backends and tolerances
+├── cases.py         sizes and sign distributions for tests and benchmarks
+├── pytorch/         reference: torch.relu
+├── cuda/            four kernels (select, branch, fmax, vec), bindings, loader
+├── triton/          masked-tile Triton kernel
+├── tests/           source examples, every backend against the reference
+├── benchmarks/      sweep.sh, profile.py (capture range), plot.py
+├── figures/         generated chart (tracked)
+└── docs/            design, results, testing, benchmarking, profiling
 ```
-
-## Optimization roadmap
-
-These are candidate experiments, not promised improvements or completed code.
-
-1. Straightforward elementwise mapping.
-2. Compare conditional and max-expression lowering.
-3. Vary the sign distribution.
-4. Inspect instructions before adding vectorization.
-
-## Correctness focus
-
-Zero, signed zero, tails, and an explicit policy for exceptional floating-point values.
-
-## Things to measure
-
-- Latency
-- Elements/s
-- Branch and predicate behavior
-- Instruction count
-
-Separate source conformance from broader shape/dtype experiments. Use the
-[benchmarking plan](../../docs/benchmarking.md) and choose
-[profiler metrics](../../docs/profiling.md) for a specific hypothesis.
-
-## Questions to answer
-
-- Does the compiler generate a branch or predicated instructions?
-- Does input sign distribution change execution?
-
-## Status
-
-⬜ **Planned**
-
-No accepted implementation or measured results for this curriculum entry.
-Results pending hardware benchmark.
-
-Follow the [optimization methodology](../../docs/methodology.md). When work
-begins, add evidence and update the [roadmap status](../../README.md#roadmap).

@@ -44,8 +44,10 @@ a reversed copy, then copies it back, so it moves twice the minimum. The back ha
 accessed in descending order: within a warp the addresses still cover the same cache
 lines, but the mirrored segment straddles a line boundary unless N lines up, and a
 16-byte vector access to the mirrored half is aligned only when N is a multiple of 4
-(FP32) or 8 (FP16/BF16). The benchmark therefore includes N = 25,000,000,
-25,000,001 and 25,000,002.
+(FP32) or 8 (FP16/BF16). The benchmark therefore includes aligned and misaligned N:
+25,000,000/25,000,001 (the source's size) and 100,000,000/100,000,001. In place, 25M
+FP16 elements are only 50 MB and stay in the 64 MiB L2 between calls, so FP16 needs the
+100M sizes to measure DRAM.
 
 ## Prerequisites
 

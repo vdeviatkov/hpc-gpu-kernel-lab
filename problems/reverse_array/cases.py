@@ -28,10 +28,12 @@ RANGES = {
 TEST_CASES = [{"n": n, "dist": "uniform"} for n in SIZES] + [
     {"n": n, "dist": d} for d in ("zeros", "unit", "tiny", "large") for n in (4, 1000, 10000)
 ]
-# 25,000,000 is a multiple of 8; 25,000,001 and 25,000,002 misalign the mirrored half
-# for 16-byte vector accesses.
+# 25M is the source's performance size, but in place it is only 50 MB in FP16, which stays
+# in the 64 MiB L2 between calls; 100M (the contract maximum) is DRAM-bound for every
+# dtype. Multiples of 8 allow 16-byte vector access to the mirrored half; +1 does not.
 BENCH_CASES = [
-    {"n": n, "dist": "uniform"} for n in (1025, 1_048_576, 25_000_000, 25_000_001, 25_000_002)
+    {"n": n, "dist": "uniform"}
+    for n in (1025, 1_048_576, 25_000_000, 25_000_001, 100_000_000, 100_000_001)
 ]
 
 

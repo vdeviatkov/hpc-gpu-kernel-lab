@@ -19,7 +19,13 @@ import torch
 from lab import dispatch
 
 FUNCTION = "reverse_"
-BACKENDS = ("pytorch", "cuda", "triton")
+VARIANTS = {
+    "cuda_pair": ("cuda", {"variant": 0}),  # one thread per element pair
+    # One thread per pair of 16-byte packs; needs N % (16 / element size) == 0 and an
+    # aligned pointer, otherwise it runs cuda_pair.
+    "cuda_vec": ("cuda", {"variant": 1}),
+}
+BACKENDS = ("pytorch", *VARIANTS, "triton")
 DTYPES = {
     "fp32": torch.float32,
     "fp16": torch.float16,

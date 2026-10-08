@@ -10,6 +10,9 @@
 
 #include <cstdint>
 
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
+
 template <typename T>
 __global__ void flash_attention_kernel(const T *__restrict__ q, const T *__restrict__ k,
                                        const T *__restrict__ v, bool causal, T *__restrict__ out,

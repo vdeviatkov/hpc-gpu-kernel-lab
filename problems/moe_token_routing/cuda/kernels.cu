@@ -10,6 +10,9 @@
 
 #include <cstdint>
 
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
+
 template <typename T>
 __global__ void
 route_tokens_kernel(const T *__restrict__ x, const float *__restrict__ router_logits, int64_t top_k,

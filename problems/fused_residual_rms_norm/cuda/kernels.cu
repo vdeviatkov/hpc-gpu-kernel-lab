@@ -10,6 +10,9 @@
 
 #include <cstdint>
 
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
+
 template <typename T>
 __global__ void fused_add_rms_norm_kernel(const T *__restrict__ x, const T *__restrict__ residual,
                                           const T *__restrict__ weight, double eps,

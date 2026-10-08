@@ -10,6 +10,9 @@
 
 #include <cstdint>
 
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
+
 template <typename T>
 __global__ void matrix_copy_kernel(const T *__restrict__ a, T *__restrict__ out, int64_t m,
                                    int64_t n) {

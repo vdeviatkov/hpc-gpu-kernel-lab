@@ -10,6 +10,9 @@
 
 #include <cstdint>
 
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
+
 template <typename T>
 __global__ void rgb_to_grayscale_kernel(const T *__restrict__ image, T *__restrict__ out, int64_t h,
                                         int64_t w) {

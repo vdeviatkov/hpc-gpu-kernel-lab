@@ -1,9 +1,15 @@
 """03 · Reverse Array: public entry point.
 
-Draft contract, to confirm against the source statement linked in README.md before
-implementing:
+Contract, verified against the LeetGPU statement (challenges/easy/19_reverse_array):
 
-Reverse a contiguous 1-D tensor x in place and return it.
+    x[i] <-> x[N - 1 - i]   for 0 <= i < N / 2, in place
+
+- Source: contiguous 1-D FP32, 1 <= N <= 100,000,000, result stored back into the
+  input. The performance test uses N = 25,000,000 with inputs uniform in
+  [-1000, 1000]; the reference is `input[:] = torch.flip(input, [0])`.
+- For odd N the middle element stays where it is.
+- Lab extensions: FP16/BF16 and N = 0.
+- The function returns the same tensor it was given, now reversed.
 """
 
 import sys
@@ -19,19 +25,26 @@ DTYPES = {
     "fp16": torch.float16,
     "bf16": torch.bfloat16,
 }
-# (rtol, atol) against the PyTorch reference, per input dtype.
+# (rtol, atol) against the PyTorch reference. Reversal only moves values, so every
+# backend must match bit for bit.
 TOLERANCES = {
     torch.float32: (0, 0),
     torch.float16: (0, 0),
     torch.bfloat16: (0, 0),
 }
 
-# The function updates its inputs in place.
+# The function updates its input in place.
 MUTATES = True
 
 
 def reverse_(x, *, backend="pytorch", **options):
-    """See the module docstring. `options` are backend launch parameters."""
-    # TODO: validate shapes, dtypes, devices and layout per the contract
-    # (see problems/vector_add/api.py for a complete example).
+    """Reverse `x` in place and return it. `options` are backend launch parameters."""
+    if not isinstance(x, torch.Tensor):
+        raise TypeError("expected torch.Tensor")
+    if x.layout != torch.strided or x.ndim != 1 or not x.is_contiguous():
+        raise ValueError("expected a contiguous one-dimensional tensor")
+    if x.dtype not in DTYPES.values():
+        raise ValueError("supported dtypes: fp32, fp16, bf16")
+    if x.requires_grad:
+        raise ValueError("in-place reversal does not support autograd; detach first")
     return dispatch.call(sys.modules[__name__], FUNCTION, backend, x, **options)

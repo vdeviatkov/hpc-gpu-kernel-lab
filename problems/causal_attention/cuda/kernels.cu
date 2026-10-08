@@ -10,6 +10,9 @@
 
 #include <cstdint>
 
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
+
 template <typename T>
 __global__ void causal_attention_kernel(const T *__restrict__ q, const T *__restrict__ k,
                                         const T *__restrict__ v, T *__restrict__ out, int64_t s,

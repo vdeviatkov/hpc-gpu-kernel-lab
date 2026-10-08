@@ -1,6 +1,8 @@
 // 26 · FP16 Batched Matrix Multiplication: CUDA kernels. Not implemented yet.
 // Fill in bmm_kernel and launch_bmm, then set IMPLEMENTED = True in implementation.py.
-// See problems/vector_add/cuda/kernels.cu for a complete example.
+// See problems/vector_add/cuda/kernels.cu for a complete example. Shared helpers:
+// lab/vector.cuh (Pack, load_pack, store_pack, pack_aligned) and lab/launch.cuh
+// (global_index, grid_threads, grid_blocks).
 #include <ATen/ATen.h>
 #include <ATen/Dispatch.h>
 #include <c10/cuda/CUDAException.h>
@@ -9,6 +11,9 @@
 #include <cuda_runtime.h>
 
 #include <cstdint>
+
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
 
 template <typename T>
 __global__ void bmm_kernel(const T *__restrict__ a, const T *__restrict__ b, T *__restrict__ out,

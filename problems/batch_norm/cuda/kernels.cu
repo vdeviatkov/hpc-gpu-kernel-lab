@@ -10,6 +10,9 @@
 
 #include <cstdint>
 
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
+
 template <typename T>
 __global__ void batch_norm_kernel(const T *__restrict__ x, const T *__restrict__ weight,
                                   const T *__restrict__ bias, double eps, T *__restrict__ out,

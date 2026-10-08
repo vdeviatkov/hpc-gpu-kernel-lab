@@ -10,6 +10,9 @@
 
 #include <cstdint>
 
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
+
 template <typename T>
 __global__ void inclusive_scan_kernel(const T *__restrict__ x, T *__restrict__ out, int64_t n) {
   // TODO: implement.

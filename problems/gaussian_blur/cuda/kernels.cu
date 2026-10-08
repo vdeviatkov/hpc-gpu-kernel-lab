@@ -10,6 +10,9 @@
 
 #include <cstdint>
 
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
+
 template <typename T>
 __global__ void gaussian_blur_kernel(const T *__restrict__ image, const T *__restrict__ kernel,
                                      T *__restrict__ out, int64_t h, int64_t w, int64_t k) {

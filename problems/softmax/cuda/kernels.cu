@@ -1,6 +1,8 @@
 // 32 · Softmax: CUDA kernels. Not implemented yet.
 // Fill in softmax_kernel and launch_softmax, then set IMPLEMENTED = True in implementation.py.
-// See problems/vector_add/cuda/kernels.cu for a complete example.
+// See problems/vector_add/cuda/kernels.cu for a complete example. Shared helpers:
+// lab/vector.cuh (Pack, load_pack, store_pack, pack_aligned) and lab/launch.cuh
+// (global_index, grid_threads, grid_blocks).
 #include <ATen/ATen.h>
 #include <ATen/Dispatch.h>
 #include <c10/cuda/CUDAException.h>
@@ -9,6 +11,9 @@
 #include <cuda_runtime.h>
 
 #include <cstdint>
+
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
 
 template <typename T>
 __global__ void softmax_kernel(const T *__restrict__ x, T *__restrict__ out, int64_t m, int64_t n) {

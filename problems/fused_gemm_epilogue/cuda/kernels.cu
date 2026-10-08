@@ -10,6 +10,9 @@
 
 #include <cstdint>
 
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
+
 template <typename T>
 __global__ void linear_relu_kernel(const T *__restrict__ x, const T *__restrict__ w,
                                    const T *__restrict__ bias, T *__restrict__ out, int64_t m,

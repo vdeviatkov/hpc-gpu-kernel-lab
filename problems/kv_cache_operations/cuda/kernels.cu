@@ -10,6 +10,9 @@
 
 #include <cstdint>
 
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
+
 template <typename T>
 __global__ void kv_cache_append_kernel(const T *__restrict__ k_new, const T *__restrict__ v_new,
                                        T *__restrict__ k_cache, T *__restrict__ v_cache,

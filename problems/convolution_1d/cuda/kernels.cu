@@ -1,6 +1,8 @@
 // 09 · 1D Convolution: CUDA kernels. Not implemented yet.
 // Fill in conv1d_kernel and launch_conv1d, then set IMPLEMENTED = True in implementation.py.
-// See problems/vector_add/cuda/kernels.cu for a complete example.
+// See problems/vector_add/cuda/kernels.cu for a complete example. Shared helpers:
+// lab/vector.cuh (Pack, load_pack, store_pack, pack_aligned) and lab/launch.cuh
+// (global_index, grid_threads, grid_blocks).
 #include <ATen/ATen.h>
 #include <ATen/Dispatch.h>
 #include <c10/cuda/CUDAException.h>
@@ -9,6 +11,9 @@
 #include <cuda_runtime.h>
 
 #include <cstdint>
+
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
 
 template <typename T>
 __global__ void conv1d_kernel(const T *__restrict__ x, const T *__restrict__ w, T *__restrict__ out,

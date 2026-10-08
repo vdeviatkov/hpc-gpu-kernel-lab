@@ -10,6 +10,9 @@
 
 #include <cstdint>
 
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
+
 template <typename T>
 __global__ void cross_entropy_kernel(const T *__restrict__ logits,
                                      const int64_t *__restrict__ labels, float *__restrict__ out,

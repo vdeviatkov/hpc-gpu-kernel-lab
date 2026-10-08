@@ -10,6 +10,9 @@
 
 #include <cstdint>
 
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
+
 template <typename T>
 __global__ void dequantize_kernel(const int8_t *__restrict__ q, const T *__restrict__ scale,
                                   int64_t quant_block, T *__restrict__ out, int64_t m, int64_t n) {

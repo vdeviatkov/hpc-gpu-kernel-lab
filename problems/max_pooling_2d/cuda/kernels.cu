@@ -10,6 +10,9 @@
 
 #include <cstdint>
 
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
+
 template <typename T>
 __global__ void max_pool2d_kernel(const T *__restrict__ x, int64_t kernel_size, int64_t stride,
                                   int64_t padding, T *__restrict__ out, int64_t n, int64_t c,

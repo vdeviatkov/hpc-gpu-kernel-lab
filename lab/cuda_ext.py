@@ -3,6 +3,10 @@
 from functools import cache
 from pathlib import Path
 
+# Shared headers for every extension: #include "lab/vector.cuh", "lab/launch.cuh",
+# "lab/checks.h". Ninja tracks header dependencies, so editing them triggers a rebuild.
+INCLUDE_DIR = Path(__file__).parent / "cuda" / "include"
+
 
 @cache
 def load_extension(name, directory, sources=("bindings.cpp", "kernels.cu")):
@@ -15,6 +19,7 @@ def load_extension(name, directory, sources=("bindings.cpp", "kernels.cu")):
     return load(
         name=name,
         sources=[str(directory / source) for source in sources],
+        extra_include_paths=[str(INCLUDE_DIR)],
         extra_cflags=["-O3"],
         extra_cuda_cflags=["-O3", "-lineinfo", "--ptxas-options=-v"],
     )

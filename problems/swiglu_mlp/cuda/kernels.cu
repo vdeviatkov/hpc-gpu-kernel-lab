@@ -10,6 +10,9 @@
 
 #include <cstdint>
 
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
+
 template <typename T>
 __global__ void swiglu_mlp_kernel(const T *__restrict__ x, const T *__restrict__ w_gate,
                                   const T *__restrict__ w_up, const T *__restrict__ w_down,

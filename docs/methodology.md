@@ -65,7 +65,8 @@ and tests; stubs raise `NotImplementedError`, so their tests skip until implemen
 Add `docs/`, `figures/` and problem-specific `benchmarks/` when a study is measured.
 
 Common timing, correctness, environment, input sampling and CUDA build helpers live
-in `lab/`. Keep launches, allocations, ownership, and synchronization visible in
+in `lab/`, and shared CUDA headers (vector access, launch geometry, tensor checks) in
+`lab/cuda/include/lab/`. Keep launches, allocations, ownership, and synchronization visible in
 each problem's own code.
 
 ## Performance models

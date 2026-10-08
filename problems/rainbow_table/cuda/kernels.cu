@@ -10,6 +10,9 @@
 
 #include <cstdint>
 
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
+
 __global__ void rainbow_table_kernel(const int32_t *__restrict__ x, int64_t rounds,
                                      int32_t *__restrict__ out, int64_t n) {
   // TODO: implement.

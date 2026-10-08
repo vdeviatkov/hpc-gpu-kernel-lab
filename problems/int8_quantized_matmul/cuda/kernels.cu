@@ -10,6 +10,9 @@
 
 #include <cstdint>
 
+#include "lab/launch.cuh"
+#include "lab/vector.cuh"
+
 __global__ void int8_matmul_kernel(const int8_t *__restrict__ a, const int8_t *__restrict__ b,
                                    double scale_a, double scale_b, int64_t zero_a, int64_t zero_b,
                                    float *__restrict__ out, int64_t m, int64_t k, int64_t n) {

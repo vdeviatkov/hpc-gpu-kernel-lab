@@ -27,7 +27,14 @@ Until measured, write **Results pending hardware benchmark**.
 
 Problem directories use plain importable names (`problems/vector_add`); the
 roadmap table owns the numbering. Shared code lives in `lab/` (dispatch, input
-sampling, test helpers, benchmark harness and report). A completed study follows
+sampling, test helpers, benchmark harness and report). Shared CUDA headers live in
+`lab/cuda/include/lab/` and are on every extension's include path:
+
+- `lab/vector.cuh`: 16-byte `Pack<T>`, `load_pack`/`store_pack`, host `pack_aligned`;
+- `lab/launch.cuh`: `global_index`, `grid_threads`, `grid_blocks`;
+- `lab/checks.h`: tensor checks for `bindings.cpp`.
+
+Share mechanics only; each kernel body stays in its problem. A completed study follows
 the [Vector Addition](problems/vector_add/README.md) layout:
 
 ```text

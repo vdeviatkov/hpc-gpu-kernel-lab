@@ -24,6 +24,11 @@ VARIANTS = {
     # One thread per pair of 16-byte packs; needs N % (16 / element size) == 0 and an
     # aligned pointer, otherwise it runs cuda_pair.
     "cuda_vec": ("cuda", {"variant": 1}),
+    # One block per tile of pairs, staged through shared memory: 16-byte accesses for any
+    # N (needs only an aligned pointer, otherwise it runs cuda_pair).
+    "cuda_tile": ("cuda", {"variant": 2}),
+    # cuda_tile with asynchronous global -> shared copies (cp.async) for interior packs.
+    "cuda_tile_async": ("cuda", {"variant": 3}),
 }
 BACKENDS = ("pytorch", *VARIANTS, "triton")
 DTYPES = {

@@ -1,135 +1,74 @@
 # 03 · Reverse Array
 
-## Source
+`x[i] ↔ x[N−1−i]`, in place: a pure data-movement kernel for studying race-free ownership,
+coalescing in both directions, and how alignment decides whether wide memory accesses
+are possible.
 
-LeetGPU: [Reverse Array](https://leetgpu.com/challenges/reverse-array)
+**Status:** ✅ Complete · validated and measured on NVIDIA GeForce RTX 5080 ·
+primary lesson: **race-free in-place indexing** · prerequisite:
+[01 · Vector Addition](../vector_add/README.md).
 
-Catalog title and difficulty verified on 2026-09-12.
+![Reverse Array speed relative to a device copy at N = 100M on RTX 5080, for aligned and misaligned N. FP32: every custom kernel reaches 97–99.6% of copy speed and PyTorch about 51%. FP16: cuda_tile, cuda_tile_async, triton_flip and triton_pair reach 98–99.6% for both N; cuda_vec drops from 99% to 84% when N is misaligned; cuda_pair reaches 73–91%.](figures/reverse_vs_copy.svg)
 
-This is an original study plan, not a reproduction of the source statement.
-The verified contract is summarized below; broader lab variants are labeled as
-extensions.
+## Key results
 
-## Contract
+RTX 5080, N = 100M (DRAM-bound). A device copy moves the same bytes, so it is the
+practical speed limit. Details are in [results](docs/results.md).
 
-Verified on 2026-10-08 against the statement in LeetGPU's challenge repository
-(`challenges/easy/19_reverse_array`):
+- **Reverse order is free; alignment is not.** A warp reading the mirrored half in
+  descending order touches the ideal 4 sectors (FP32); misaligned N adds exactly one.
+- **`cuda_tile` is the best kernel: 98–99.6% of copy speed for every dtype and N.** It
+  stages each block's front and back ranges through shared memory, so 16-byte accesses
+  work even when the mirrored half is misaligned.
+- **Wide accesses matter for 2-byte types.** One-element-per-thread `cuda_pair` reaches
+  only 73–91% in FP16; 16-byte variants reach 98–99.6%.
+- **PyTorch takes twice as long as a copy,** because `torch.flip` writes a reversed copy
+  that is then copied back.
+- **Triton matches CUDA `tile` at DRAM-bound sizes,** although for misaligned N it
+  falls back to scalar accesses that touch 4–8× the needed sectors per instruction.
 
-```text
-x[i] <-> x[N - 1 - i]        for 0 <= i < N / 2, in place
+## Documentation
+
+| Page | Contents |
+|---|---|
+| [Design](docs/design.md) | Contract, ownership rule, alignment math, performance model, the variants |
+| [Results](docs/results.md) | Latency per backend, profiling (why the variants differ), Triton, limitations |
+| [Testing](docs/testing.md) | Test cases, running the suite, Compute Sanitizer |
+| [Benchmarking](docs/benchmarking.md) | Commands, copy reference, benchmark sizes, reproduction |
+| [Profiling](docs/profiling.md) | Capturing one launch, report sections, metrics and how to read them |
+
+## Quick start
+
+From the repository root, after [setup](../vector_add/docs/testing.md#setup):
+
+```bash
+python -m pytest -q problems/reverse_array
+python -m lab.bench reverse_array --copy-reference --peak-gb-s 960
 ```
 
-- Contiguous 1-D FP32, 1 ≤ N ≤ 100,000,000; the result is stored back into the input.
-  The performance test uses N = 25,000,000 with inputs uniform in [−1000, 1000]; the
-  reference is `input[:] = torch.flip(input, [0])`.
-- For odd N the middle element stays in place.
-- Lab extensions: FP16/BF16 and N = 0. The function returns the input tensor itself.
-- Race-free rule: each pair `(i, N−1−i)` has exactly one owner, which reads both
-  elements before writing either. A thread per element writing `x[i] = x[N−1−i]` would
-  overwrite values another thread has not read yet.
+```python
+import torch
 
-## Performance model
+from problems.reverse_array.api import reverse_
 
-| Quantity | Formula | FP32, N = 25,000,000 |
-|---|---|---:|
-| Memory traffic | `2·N·s` (every element read once, written once) | 200 MB |
-| Work | `N / 2` swaps, no arithmetic | 12.5 M |
-| DRAM-limited time | `2·N·s / 960 GB/s` | 208 µs |
-| Practical target | device copy of the same tensor | ~244 µs |
-| PyTorch reference | `torch.flip` + `copy_`: `4·N·s` | ~2× the target |
+x = torch.arange(10, dtype=torch.float32, device="cuda")
+# Backends: pytorch, cuda_pair, cuda_vec, cuda_tile, cuda_tile_async,
+# triton_pair, triton_flip
+reverse_(x, backend="cuda_tile")  # x is now [9, 8, ..., 0]
+```
 
-Reversal moves exactly the bytes of a copy, so a device copy is the realistic target, as
-for [ReLU](../relu/docs/design.md#performance-model). The PyTorch reference first writes
-a reversed copy, then copies it back, so it moves twice the minimum. The back half is
-accessed in descending order: within a warp the addresses still cover the same cache
-lines, but the mirrored segment straddles a line boundary unless N lines up, and a
-16-byte vector access to the mirrored half is aligned only when N is a multiple of 4
-(FP32) or 8 (FP16/BF16). The benchmark therefore includes aligned and misaligned N:
-25,000,000/25,000,001 (the source's size) and 100,000,000/100,000,001. In place, 25M
-FP16 elements are only 50 MB and stay in the 64 MiB L2 between calls, so FP16 needs the
-100M sizes to measure DRAM.
-
-## Prerequisites
-
-[01 · Vector Addition](../vector_add/README.md)
-
-## Difficulty
-
-- LeetGPU: **Easy**.
-
-## Why this problem matters
-
-An in-place permutation forces ownership reasoning: each swap must have one writer pair, even though both addresses are globally visible.
-
-## Primary lesson
-
-**Race-free in-place indexing**
-
-## Primary concepts
-
-- Indexing
-- In-place ownership
-- Memory coalescing
-
-## Planned implementations
-
-- [x] PyTorch correctness reference and meaningful baseline
-- [ ] CUDA straightforward baseline
-- [ ] CUDA named optimization variants
-- [ ] Triton implementation with explicit tile/warp choices
-
-CUDA and Triton provide useful low-level contrasts against PyTorch. JAX is deferred until it would answer a distinct compiler or performance question rather than duplicate coverage.
-
-Scaffold: every stub raises `NotImplementedError` until it is implemented.
-Run the tests with `python -m pytest problems/reverse_array` and benchmark with
-`python -m lab.bench reverse_array`.
+## Layout
 
 ```text
 reverse_array/
-    README.md   study plan and status
-    api.py      public entry point and verified contract
-    cases.py    sizes (odd/even, boundaries, N mod 8) and value ranges
-    pytorch/    reference (torch.flip + copy_)
-    cuda/       kernels.cu, bindings.cpp, implementation.py (stubs)
-    triton/     Triton kernel (stub)
-    tests/      test_reverse_array.py
+├── README.md        overview (this page)
+├── api.py           public entry point, contract, backends and tolerances
+├── cases.py         sizes (odd/even, boundaries, N mod 8) and value ranges
+├── pytorch/         reference: torch.flip + copy_
+├── cuda/            pair, vec, tile and tile_async kernels, bindings, loader
+├── triton/          pair and flip kernels
+├── tests/           source examples, in-place semantics, every backend vs the reference
+├── benchmarks/      sweep.sh (benchmarks + Nsight reports), plot.py
+├── figures/         generated chart (tracked)
+└── docs/            design, results, testing, benchmarking, profiling
 ```
-
-## Optimization roadmap
-
-These are candidate experiments, not promised improvements or completed code.
-
-1. Assign one thread to each disjoint pair.
-2. Handle the center element explicitly.
-3. Compare grid-stride and contiguous pair assignments.
-4. Inspect both directions of global access.
-
-## Correctness focus
-
-Odd/even length, a single element, and disjoint ownership of every swap.
-
-## Things to measure
-
-- Latency
-- Effective GB/s
-- Memory transactions
-- Sanitizer findings
-
-Separate source conformance from broader shape/dtype experiments. Use the
-[benchmarking plan](../../docs/benchmarking.md) and choose
-[profiler metrics](../../docs/profiling.md) for a specific hypothesis.
-
-## Questions to answer
-
-- Can two threads update the same location?
-- Are descending addresses necessarily uncoalesced?
-
-## Status
-
-⬜ **Planned**
-
-No accepted implementation or measured results for this curriculum entry.
-Results pending hardware benchmark.
-
-Follow the [optimization methodology](../../docs/methodology.md). When work
-begins, add evidence and update the [roadmap status](../../README.md#roadmap).

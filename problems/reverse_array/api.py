@@ -29,8 +29,12 @@ VARIANTS = {
     "cuda_tile": ("cuda", {"variant": 2}),
     # cuda_tile with asynchronous global -> shared copies (cp.async) for interior packs.
     "cuda_tile_async": ("cuda", {"variant": 3}),
+    # Triton: each element owns a pair, back half addressed in descending order.
+    "triton_pair": ("triton", {"flip": False}),
+    # Triton: both halves loaded in ascending order, reversed in registers with tl.flip.
+    "triton_flip": ("triton", {"flip": True}),
 }
-BACKENDS = ("pytorch", *VARIANTS, "triton")
+BACKENDS = ("pytorch", *VARIANTS)
 DTYPES = {
     "fp32": torch.float32,
     "fp16": torch.float16,

@@ -7,9 +7,46 @@ LeetGPU: [Interleave Arrays](https://leetgpu.com/challenges/interleave-arrays)
 Catalog title and difficulty verified on 2026-09-12.
 
 This is an original study plan, not a reproduction of the source statement.
-For LeetGPU work, confirm the current signature, layout, dtype, and boundary
-contract on the linked page before writing a reference. Any broader lab variant
-must be labeled separately.
+The verified contract is summarized below; broader lab variants are labeled as
+extensions.
+
+## Contract
+
+Verified on 2026-10-10 against the statement in LeetGPU's challenge repository
+(`challenges/easy/63_interleave`):
+
+```text
+out[2·i] = A[i],  out[2·i + 1] = B[i]        for 0 <= i < N    (out has 2N elements)
+```
+
+- Contiguous 1-D FP32 inputs of equal length, 1 ≤ N ≤ 50,000,000, written to a separate
+  output. The performance test uses N = 25,000,000 with normally distributed inputs; the
+  reference is `output[0::2] = A; output[1::2] = B`.
+- Lab extensions: FP16/BF16 and N = 0. The function returns a new tensor and never
+  modifies its inputs; `a` and `b` may be the same tensor.
+
+## Performance model
+
+| Quantity | Formula | FP32, N = 25,000,000 |
+|---|---|---:|
+| Memory traffic | read `2·N·s`, write `2·N·s` | 400 MB |
+| Work | none: `2·N` element moves | — |
+| DRAM-limited time | `4·N·s / 960 GB/s` | 417 µs |
+| Practical target | device copy of the same bytes (2N elements) | ≈ 489 µs |
+
+Interleaving moves the same bytes, with the same 1:1 read/write mix, as copying a 2N-element
+tensor, so a device copy is the realistic target. The ≈ 489 µs is scaled from the copy
+measured in [Reverse Array](../reverse_array/docs/results.md) (977 µs for twice the bytes)
+and will be measured directly. Out of place, even 25M FP16 (200 MB moved) is far larger than
+the 64 MiB L2, so every benchmark size from 25M up is DRAM-bound.
+
+The difficulty is the shape mismatch: inputs are two contiguous streams, the output
+alternates between them. Mapping threads to inputs makes loads contiguous and stores
+stride-2; mapping threads to outputs does the opposite. Output position `2i` depends only
+on `i`, not on N, so unlike Reverse Array, 16-byte accesses are possible for any N given
+aligned pointers; only the last `N mod 4` (FP32) or `N mod 8` (FP16) elements need scalar
+code. The reference writes the output in two strided passes, so expect it to be slower
+than a copy.
 
 ## Prerequisites
 
@@ -35,7 +72,7 @@ Packing two streams introduces layout choices that later recur in gated activati
 
 ## Planned implementations
 
-- [ ] PyTorch correctness reference and meaningful baseline
+- [x] PyTorch correctness reference and meaningful baseline
 - [ ] CUDA straightforward baseline
 - [ ] CUDA named optimization variants
 - [ ] Triton implementation with explicit tile/warp choices
@@ -49,9 +86,9 @@ Run the tests with `python -m pytest problems/interleave_arrays` and benchmark w
 ```text
 interleave_arrays/
     README.md       study plan and status
-    api.py          public entry point and draft contract
-    cases.py        test and benchmark inputs, bytes and FLOPs
-    pytorch/        reference (stub)
+    api.py          public entry point and verified contract
+    cases.py        sizes (every N mod 8) and value distributions
+    pytorch/        reference (two strided copies)
     cuda/           kernels.cu, bindings.cpp, implementation.py (stubs)
     triton/         Triton kernel (stub)
     tests/          test_interleave_arrays.py

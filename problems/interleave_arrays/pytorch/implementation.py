@@ -1,11 +1,14 @@
 """PyTorch reference and eager baseline for 04 · Interleave Arrays.
 
-Not implemented yet. Every other backend is tested against this function, so
-write the plainest correct version of the contract in api.py.
+The statement's own reference: two strided copies into a fresh output. Every other
+backend is tested against this function.
 """
+
+import torch
 
 
 def interleave(a, b):
-    raise NotImplementedError(
-        "interleave: PyTorch reference not implemented (pytorch/implementation.py)"
-    )
+    out = torch.empty(2 * a.numel(), dtype=a.dtype, device=a.device)
+    out[0::2] = a
+    out[1::2] = b
+    return out

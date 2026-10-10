@@ -85,6 +85,7 @@ python -m pip install -r requirements.txt
 python -m pytest -q                              # stubs skip until implemented
 python -m lab.bench relu                         # correctness-gated GPU benchmark
 python -m lab.report artifacts/relu.json         # Markdown summary
+python -m lab.profile relu cuda_vec fp16         # one launch, for ncu/nsys capture ranges
 ```
 
 Contribution requirements are described in [CONTRIBUTING.md](CONTRIBUTING.md).

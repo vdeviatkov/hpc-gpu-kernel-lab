@@ -3,6 +3,28 @@
 Each study should choose measurements from its optimization hypothesis, rather
 than collecting every counter and searching for a favorable explanation.
 
+## Capturing one backend: `lab.profile`
+
+[lab/profile.py](../lab/profile.py) runs one backend of one problem inside a CUDA
+profiler capture range. It first checks the backend against the PyTorch reference, then
+builds and warms it up, and only then calls `cudaProfilerStart`, so input generation,
+compilation and the reference never appear in a capture.
+
+```bash
+# One launch, hardware counters (case = last BENCH_CASES entry with n overridden):
+ncu --profile-from-start off --metrics dram__throughput.avg.pct_of_peak_sustained_elapsed \
+  python -m lab.profile reverse_array cuda_tile fp16 n=100000001
+
+# A hundred launches on a timeline, for launch overhead:
+nsys profile --capture-range=cudaProfilerApi --capture-range-end=stop \
+  python -m lab.profile relu cuda_select fp32 n=1025 --launches 100
+```
+
+Arguments: problem, backend, dtype, then any `key=value` case overrides (`--case i`
+picks a different `BENCH_CASES` entry). Check the kernel name in the profiler output to
+confirm what was captured. Some backends launch more than kernels: PyTorch's reversal is
+a flip kernel plus a device-to-device memcpy, which ncu does not list.
+
 ## Nsight Systems: where time goes
 
 Use the timeline to inspect CUDA API calls, kernel launches, stream ordering,

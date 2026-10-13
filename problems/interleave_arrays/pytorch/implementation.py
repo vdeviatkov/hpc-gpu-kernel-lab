@@ -7,6 +7,7 @@ baseline that builds the output in one contiguous-write kernel.
 
 import torch
 
+
 def interleave(a, b, *, method="slices"):
     if method == "stack":
         return torch.stack((a, b), dim=1).reshape(-1)

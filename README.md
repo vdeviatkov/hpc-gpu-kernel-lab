@@ -24,7 +24,7 @@ Status: ⬜ Planned · 🟨 In Progress · ✅ Complete · 🚀 Optimized.
 | 01 | [Vector Addition](problems/vector_add/README.md) | ✅ | ✅ | ✅ | ✅ | Launch overhead vs bandwidth | ✅ Complete |
 | 02 | [ReLU](problems/relu/README.md) | ✅ | ✅ | ✅ | — | Predication and branching | ✅ Complete |
 | 03 | [Reverse Array](problems/reverse_array/README.md) | ✅ | ✅ | ✅ | — | Race-free in-place indexing | ✅ Complete |
-| 04 | [Interleave Arrays](problems/interleave_arrays/README.md) | — | — | — | — | Lane-to-output mapping | ⬜ Planned |
+| 04 | [Interleave Arrays](problems/interleave_arrays/README.md) | ✅ | — | ✅ | — | Lane-to-output mapping | ✅ Complete |
 | 05 | [RGB to Grayscale](problems/rgb_to_grayscale/README.md) | — | — | — | — | Interleaved channel access | ⬜ Planned |
 | 06 | [Rainbow Table](problems/rainbow_table/README.md) | — | — | — | — | Integer instruction throughput | ⬜ Planned |
 | 07 | [Matrix Copy](problems/matrix_copy/README.md) | — | — | — | — | Memory bandwidth ceiling | ⬜ Planned |

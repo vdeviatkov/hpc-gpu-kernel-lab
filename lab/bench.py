@@ -171,16 +171,23 @@ def case_label(case):
 COPY_REFERENCE = "copy_reference"
 
 
-def time_copy_reference(row, inputs, args, sync):
-    """Time a device-to-device copy of the first tensor input (one read, one write stream).
+def copy_tensors(tensors):
+    """One device-to-device copy per tensor, including allocation of each destination."""
+    return [t.clone() for t in tensors]
 
-    A practical bandwidth target for problems that move about as many bytes as a copy.
-    Like the backends, it includes allocation of the destination.
+
+def time_copy_reference(row, inputs, args, sync):
+    """Time a device-to-device copy of every tensor input (one read, one write stream).
+
+    A practical bandwidth target for problems that move about as many bytes as a copy:
+    for one input it is a copy of that input; for several (e.g. interleaving a and b) it
+    copies all of them, so the bytes match a kernel that reads every input once and
+    writes as much. Like the backends, it includes allocation of the destinations.
     """
-    source = next(a for a in inputs if isinstance(a, torch.Tensor))
-    values = measure(source.clone, sync, args.scope, args.warmup, args.samples)
+    sources = [a for a in inputs if isinstance(a, torch.Tensor)]
+    values = measure(partial(copy_tensors, sources), sync, args.scope, args.warmup, args.samples)
     latency = summarize(values)
-    nbytes = 2 * source.numel() * source.element_size()
+    nbytes = 2 * sum(s.numel() * s.element_size() for s in sources)
     row.update(
         status="ok",
         raw_latency_us=values,
@@ -297,7 +304,7 @@ def parser():
     p.add_argument(
         "--copy-reference",
         action="store_true",
-        help="also time a device copy of the first input and report %% of copy",
+        help="also time a device copy of every input and report %% of copy",
     )
     p.add_argument("--output", type=Path, help="default: artifacts/<problem>.json")
     return p

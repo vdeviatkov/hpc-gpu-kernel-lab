@@ -76,6 +76,23 @@ def test_same_input_twice(backend):
     torch.testing.assert_close(actual.cpu(), torch.tensor([1.0, 1.0, 2.0, 2.0, 3.0, 3.0]))
 
 
+@pytest.mark.parametrize("offset", [1, 3])
+@pytest.mark.parametrize("dtype", api.DTYPES)
+@pytest.mark.parametrize("backend", api.BACKENDS)
+def test_storage_offsets(backend, dtype, offset):
+    """Inputs that start mid-allocation are not 16-byte aligned: vector paths must fall back."""
+    skip_if_unavailable(backend, api)
+    skip_unsupported_dtype(api.DTYPES[dtype])
+    n = 1029
+    base = torch.arange(2 * (n + offset), dtype=torch.float32).to(api.DTYPES[dtype])
+    base = base.to(device())
+    a, b = base[offset : offset + n], base[n + 2 * offset : 2 * n + 2 * offset]
+    assert a.numel() == b.numel() == n and a.data_ptr() % 16 != 0 and b.data_ptr() % 16 != 0
+    actual = call_or_skip(api, backend, (a, b))
+    expected = torch.stack((a, b), dim=1).reshape(-1)
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
 @pytest.mark.parametrize("dtype", api.DTYPES)
 @pytest.mark.parametrize("case", cases.TEST_CASES, ids=case_id)
 @pytest.mark.parametrize("backend", [b for b in api.BACKENDS if b != "pytorch"])

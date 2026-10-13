@@ -44,3 +44,17 @@ def test_relative_metrics_match_case_and_dtype():
     assert rows[1]["speedup_vs_pytorch"] == 2
     assert "speedup_vs_pytorch" not in rows[0]
     assert "speedup_vs_pytorch" not in rows[2]
+
+
+def test_copy_reference_counts_every_input():
+    from types import SimpleNamespace
+
+    import torch
+
+    a, b = torch.ones(1000), torch.ones(1000)
+    args = SimpleNamespace(scope="api", warmup=1, samples=3, peak_gb_s=None)
+    row = {"dtype": "fp32", "case": {"n": 1000}}
+    row = bench.time_copy_reference(row, (a, b, 7), args, lambda _: None)
+    assert row["status"] == "ok"
+    assert row["logical_bytes"] == 2 * 2 * 1000 * 4  # read and write both inputs
+    assert len(row["raw_latency_us"]) == 3

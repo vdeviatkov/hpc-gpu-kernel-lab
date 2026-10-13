@@ -19,7 +19,16 @@ import torch
 from lab import dispatch
 
 FUNCTION = "interleave"
-BACKENDS = ("pytorch", "cuda", "triton")
+VARIANTS = {
+    # PyTorch in one contiguous-write kernel; "pytorch" itself is the statement's reference.
+    "pytorch_stack": ("pytorch", {"method": "stack"}),
+    "cuda_input": ("cuda", {"variant": 0}),  # thread per input element, stride-2 stores
+    "cuda_output": ("cuda", {"variant": 1}),  # thread per output element, alternating loads
+    "cuda_pair_store": ("cuda", {"variant": 2}),  # thread per input element, one paired store
+    # 16-byte packs of both inputs and the output; misaligned inputs run cuda_input.
+    "cuda_vec": ("cuda", {"variant": 3}),
+}
+BACKENDS = ("pytorch", *VARIANTS, "triton")
 DTYPES = {
     "fp32": torch.float32,
     "fp16": torch.float16,

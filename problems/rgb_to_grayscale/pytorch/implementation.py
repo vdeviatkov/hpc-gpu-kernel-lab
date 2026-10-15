@@ -1,11 +1,11 @@
 """PyTorch reference and eager baseline for 05 · RGB to Grayscale.
 
-Not implemented yet. Every other backend is tested against this function, so
-write the plainest correct version of the contract in api.py.
+The statement's formula with its exact coefficients, computed in FP32 and rounded to the
+image dtype. Every other backend is tested against this function.
 """
 
 
 def rgb_to_grayscale(image):
-    raise NotImplementedError(
-        "rgb_to_grayscale: PyTorch reference not implemented (pytorch/implementation.py)"
-    )
+    rgb = image.float()
+    gray = 0.299 * rgb[..., 0] + 0.587 * rgb[..., 1] + 0.114 * rgb[..., 2]
+    return gray.to(image.dtype)

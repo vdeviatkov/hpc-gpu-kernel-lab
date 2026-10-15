@@ -1,139 +1,78 @@
 # 05 · RGB to Grayscale
 
-## Source
+`gray = 0.299·R + 0.587·G + 0.114·B` over an image of interleaved RGB pixels: three reads
+per write, 12 bytes per pixel in FP32. A memory-bound kernel for studying whether a
+three-channel stride costs anything, and what wider accesses, shared-memory staging or a
+planar layout buy.
 
-LeetGPU: [RGB to Grayscale](https://leetgpu.com/challenges/rgb-to-grayscale)
+**Status:** 🟨 CUDA and PyTorch complete, Triton not implemented yet · validated and measured
+on NVIDIA GeForce RTX 5080 · primary lesson: **interleaved channel access** · prerequisite:
+[04 · Interleave Arrays](../interleave_arrays/README.md).
 
-Catalog title and difficulty verified on 2026-09-12.
+![Effective bandwidth of every backend at 2048 × 2048 and 4096 × 4096 on RTX 5080. At 4096 × 4096 the CUDA kernels and torch.compile reach 809–866 GB/s, below the 960 GB/s DRAM peak; at 2048 × 2048 FP16 cuda_vec reaches 2060 GB/s because the image stays in L2.](figures/rgb_bandwidth.svg)
 
-This is an original study plan, not a reproduction of the source statement.
-The verified contract is summarized below; broader lab variants are labeled as
-extensions.
+## Key results
 
-## Contract
+RTX 5080. 4096 × 4096 (a lab extension) is DRAM-bound; the source's 2048 × 2048 FP16 image
+stays in L2. Details are in [results](docs/results.md).
 
-Verified on 2026-10-12 against the statement in LeetGPU's challenge repository
-(`challenges/easy/66_rgb_to_grayscale`):
+- **The stride costs nothing at DRAM-bound sizes.** One pixel per thread (`cuda_pixel`),
+  16-byte packs (`cuda_vec`) and shared-memory staging (`cuda_smem`) all read exactly the
+  image once at 94% DRAM throughput, 262–265 µs per FP32 kernel in the profiler. L1
+  absorbs the stride-3 loads: the second and third channel loads hit the sectors the first
+  one fetched.
+- **From L2, wide accesses win:** at 2048² FP16 `cuda_vec` takes 7.7 µs (91% of L2
+  bandwidth), `cuda_pixel` 14.0 µs, and `cuda_smem` 20.2 µs, slowed by 6.5× the
+  instructions, a barrier and 2-way bank conflicts.
+- **A planar layout does not help:** the planar kernel alone is as fast as the interleaved
+  ones, and converting makes `cuda_planar` 2.6× slower.
+- **`torch.compile` matches the CUDA kernels' GPU time** (one fused Triton kernel, 2 pixels
+  per thread); it is slower per call (19.5 µs fixed cost against 11 µs). The eager
+  reference reads the image three times (4.5–12× slower); `image @ w` runs an
+  instruction-bound cuBLAS GEMV (1.8–2.9× slower than the CUDA kernels).
 
-```text
-gray[p] = 0.299·R[p] + 0.587·G[p] + 0.114·B[p]      for every pixel p of an H × W image
+## Documentation
+
+| Page | Contents |
+|---|---|
+| [Design](docs/design.md) | Contract, the layout problem, performance model, the variants |
+| [Results](docs/results.md) | Latency per backend, profiling (why the variants differ), decisions, limitations |
+| [Testing](docs/testing.md) | Test cases, running the suite, Compute Sanitizer |
+| [Benchmarking](docs/benchmarking.md) | Commands, call cost vs kernel time, sizes, reproduction |
+| [Profiling](docs/profiling.md) | Capturing one launch, metrics with definitions and decisions |
+
+## Quick start
+
+From the repository root, after [setup](../vector_add/docs/testing.md#setup):
+
+```bash
+python -m pytest -q problems/rgb_to_grayscale
+python -m lab.bench rgb_to_grayscale --copy-reference --peak-gb-s 960
 ```
 
-- FP32 input of `H·W·3` interleaved values (R, G, B, R, G, B, …), FP32 output of `H·W`
-  values; 1 ≤ W, H ≤ 4096, at most 4,194,304 pixels, values in [0, 255]. The exact
-  coefficients are required. The performance test is 2048 × 2048 with integers 0–255;
-  the tolerance is 1e−5.
-- Here: a contiguous `(H, W, 3)` tensor in, a new `(H, W)` tensor out (the same memory
-  layout as the source's flat arrays).
-- Lab extensions: FP16/BF16 (computed in FP32, rounded to the image dtype), empty images,
-  and images above 4,194,304 pixels for DRAM-bound measurements.
-- Results are compared within tolerances, not bit for bit: fused multiply-add and
-  summation order can change the last bit.
+```python
+import torch
 
-## Performance model
+from problems.rgb_to_grayscale.api import rgb_to_grayscale
 
-| Quantity | Formula | 2048 × 2048 FP32 (source) | 4096 × 4096 FP32 (extension) |
-|---|---|---:|---:|
-| Read | `3·P·s` (P = H·W pixels) | 50.3 MB | 201 MB |
-| Write | `P·s` | 16.8 MB | 67 MB |
-| Work | 3 multiplies + 2 adds per pixel | 21 M ops | 84 M ops |
-| DRAM-limited time | `4·P·s / 960 GB/s` | 70 µs | 280 µs |
+image = torch.tensor([[[255.0, 0.0, 0.0], [100.0, 150.0, 200.0]]], device="cuda")
+# Backends: pytorch, pytorch_matmul, pytorch_compile,
+#           cuda_pixel, cuda_vec, cuda_smem, cuda_planar
+rgb_to_grayscale(image, backend="cuda_vec")  # [[76.245, 140.75]]
+```
 
-Five operations per 16 bytes moved: memory-bound like the previous problems, but now with
-arithmetic. The source's size is only 67 MB, about the size of the 64 MiB L2; benchmarks
-reuse their input, so much of it stays cached between calls and 2048 × 2048 measures a
-warm cache. Since that is already the contract maximum, DRAM behavior needs the lab
-extension (4096 × 4096). The copy reference moves bytes in a 1:1 read/write mix while this
-kernel reads three bytes per byte written, so the copy is a reference rather than a strict
-ceiling, as in Vector Addition.
-
-The layout question: each pixel is 12 bytes, so with one pixel per thread neighbouring
-lanes read 12 bytes apart (stride 3). Four FP32 pixels are exactly three 16-byte packs, and
-eight FP16 pixels too, so a vectorized kernel can read every pixel with 16-byte loads and
-write the results with one 16-byte store. In shared memory a stride of 3 is conflict-free,
-because 3 and the 32 banks share no factor.
-
-## Prerequisites
-
-[04 · Interleave Arrays](../interleave_arrays/README.md)
-
-## Difficulty
-
-- LeetGPU: **Easy**.
-
-## Why this problem matters
-
-Three-channel data provides a concrete layout problem that is not equivalent to adding another vector.
-
-## Primary lesson
-
-**Interleaved channel access**
-
-## Primary concepts
-
-- Data layouts
-- Memory coalescing
-- Vectorized access
-
-## Planned implementations
-
-- [x] PyTorch correctness reference and meaningful baseline
-- [ ] CUDA straightforward baseline
-- [ ] CUDA named optimization variants
-- [ ] Triton implementation with explicit tile/warp choices
-
-CUDA and Triton provide useful low-level contrasts against PyTorch. JAX is deferred until it would answer a distinct compiler or performance question rather than duplicate coverage.
-
-Scaffold: every stub raises `NotImplementedError` until it is implemented.
-Run the tests with `python -m pytest problems/rgb_to_grayscale` and benchmark with
-`python -m lab.bench rgb_to_grayscale`.
+## Layout
 
 ```text
 rgb_to_grayscale/
-    README.md      study plan and status
-    api.py         public entry point and verified contract
-    cases.py       image sizes (every pixel count mod 8) and value distributions
-    pytorch/       reference (the source formula in FP32)
-    cuda/          kernels.cu, bindings.cpp, implementation.py (stubs)
-    triton/        Triton kernel (stub)
-    tests/         test_rgb_to_grayscale.py
+├── README.md        overview (this page)
+├── api.py           public entry point, contract, backends and tolerances
+├── cases.py         image sizes (every pixel count mod 8) and value distributions
+├── pytorch/         reference (the formula, eager), matmul and torch.compile baselines
+├── cuda/            pixel, vec, smem and planar kernels, bindings, loader
+├── triton/          stub: not implemented yet
+├── tests/           source examples, channel order, misalignment, every backend vs the reference
+├── benchmarks/      sweep.sh (benchmarks + Nsight reports), plot.py
+├── figures/         generated chart (tracked)
+└── docs/            design, results, testing, benchmarking, profiling
 ```
-
-## Optimization roadmap
-
-These are candidate experiments, not promised improvements or completed code.
-
-1. One pixel per thread using the source coefficients.
-2. Compare pixel tiles and aligned channel groups.
-3. Inspect compiler treatment of three-channel strides.
-4. Measure width and alignment sensitivity.
-
-## Correctness focus
-
-Channel ordering, coefficient precision, image tails, and output conversion rules.
-
-## Things to measure
-
-- Latency
-- Pixels/s
-- Transaction efficiency
-- Register count
-
-Separate source conformance from broader shape/dtype experiments. Use the
-[benchmarking plan](../../docs/benchmarking.md) and choose
-[profiler metrics](../../docs/profiling.md) for a specific hypothesis.
-
-## Questions to answer
-
-- How does a three-channel stride affect memory transactions?
-- Would converting layout cost more than it saves?
-
-## Status
-
-⬜ **Planned**
-
-No accepted implementation or measured results for this curriculum entry.
-Results pending hardware benchmark.
-
-Follow the [optimization methodology](../../docs/methodology.md). When work
-begins, add evidence and update the [roadmap status](../../README.md#roadmap).

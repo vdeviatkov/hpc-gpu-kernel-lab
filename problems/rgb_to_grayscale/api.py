@@ -23,7 +23,21 @@ import torch
 from lab import dispatch
 
 FUNCTION = "rgb_to_grayscale"
-BACKENDS = ("pytorch", "cuda", "triton")
+VARIANTS = {
+    # Faster PyTorch baselines; "pytorch" itself is the reference (several separate kernels).
+    "pytorch_matmul": ("pytorch", {"method": "matmul"}),  # image @ w, one cuBLAS kernel
+    "pytorch_compile": ("pytorch", {"method": "compile"}),  # torch.compile, one fused kernel
+    "cuda_pixel": ("cuda", {"variant": 0}),  # one thread per pixel, stride-3 loads
+    # one thread per 4 (FP32) or 8 (FP16/BF16) pixels: three 16-byte loads, one 16-byte store;
+    # a misaligned image runs cuda_pixel.
+    "cuda_vec": ("cuda", {"variant": 1}),
+    # a block stages each 256-pixel tile through shared memory with 16-byte loads; a
+    # misaligned image runs cuda_pixel.
+    "cuda_smem": ("cuda", {"variant": 2}),
+    # converts to R, G, B planes first (a second kernel), then reads each plane coalesced.
+    "cuda_planar": ("cuda", {"variant": 3}),
+}
+BACKENDS = ("pytorch", *VARIANTS, "triton")
 DTYPES = {
     "fp32": torch.float32,
     "fp16": torch.float16,

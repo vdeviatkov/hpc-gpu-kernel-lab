@@ -14,6 +14,16 @@ from lab.testing import (
 )
 from problems.rgb_to_grayscale import api, cases
 
+# torch.compile is exercised only on the GPU: on CPU it needs a C++ toolchain and slows the
+# CPU-only CI for no extra coverage of this problem's kernels.
+COMPILE_BACKENDS = {"pytorch_compile"}
+
+
+def skip_compile_without_gpu(backend):
+    if backend in COMPILE_BACKENDS and device() != "cuda":
+        pytest.skip("torch.compile baseline is tested on the GPU only")
+
+
 # The statement's worked examples: (height, width, flat RGB input, expected gray).
 SOURCE_EXAMPLES = {
     "example1": (
@@ -32,6 +42,7 @@ COEFFICIENTS = (0.299, 0.587, 0.114)
 @pytest.mark.parametrize("name", SOURCE_EXAMPLES)
 @pytest.mark.parametrize("backend", api.BACKENDS)
 def test_source_examples(backend, name):
+    skip_compile_without_gpu(backend)
     skip_if_unavailable(backend, api)
     h, w, values, expected = SOURCE_EXAMPLES[name]
     image = torch.tensor(values, dtype=torch.float32, device=device()).reshape(h, w, 3)
@@ -46,6 +57,7 @@ def test_source_examples(backend, name):
 @pytest.mark.parametrize("backend", api.BACKENDS)
 def test_channel_order(backend, dtype):
     """Pure red, green and blue pixels: a swapped channel gives a different coefficient."""
+    skip_compile_without_gpu(backend)
     skip_if_unavailable(backend, api)
     skip_unsupported_dtype(api.DTYPES[dtype])
     image = torch.tensor(
@@ -60,6 +72,7 @@ def test_channel_order(backend, dtype):
 @pytest.mark.parametrize("backend", api.BACKENDS)
 def test_fresh_output(backend):
     """A new contiguous (H, W) tensor of the image dtype and device."""
+    skip_compile_without_gpu(backend)
     skip_if_unavailable(backend, api)
     (image,) = cases.make_inputs({"h": 5, "w": 7, "dist": "int"}, Sampler(torch.float32, device()))
     out = call_or_skip(api, backend, (image,))
@@ -70,9 +83,27 @@ def test_fresh_output(backend):
 
 
 @pytest.mark.parametrize("dtype", api.DTYPES)
+@pytest.mark.parametrize("backend", api.BACKENDS)
+def test_misaligned_image(backend, dtype):
+    """A row slice of a larger image starts mid-allocation: vector paths must fall back."""
+    skip_compile_without_gpu(backend)
+    skip_if_unavailable(backend, api)
+    skip_unsupported_dtype(api.DTYPES[dtype])
+    sampler = Sampler(api.DTYPES[dtype], device())
+    (full,) = cases.make_inputs({"h": 9, "w": 13, "dist": "int"}, sampler)
+    image = full[1:]  # starts 13 * 3 elements in: not 16-byte aligned for any dtype here
+    assert image.is_contiguous() and image.data_ptr() % 16 != 0
+    actual = call_or_skip(api, backend, (image,))
+    expected = call_or_skip(api, "pytorch", (image,))
+    rtol, atol = api.TOLERANCES[api.DTYPES[dtype]]
+    torch.testing.assert_close(actual, expected, rtol=rtol, atol=atol)
+
+
+@pytest.mark.parametrize("dtype", api.DTYPES)
 @pytest.mark.parametrize("case", cases.TEST_CASES, ids=case_id)
 @pytest.mark.parametrize("backend", [b for b in api.BACKENDS if b != "pytorch"])
 def test_matches_reference(backend, case, dtype):
+    skip_compile_without_gpu(backend)
     check_against_reference(api, cases, backend, case, dtype)
 
 

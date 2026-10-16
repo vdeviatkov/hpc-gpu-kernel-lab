@@ -96,8 +96,9 @@ bandwidth reference rather than a time to reach. Compare GB/s, not percent of co
   size from the first image it compiles and keeps that choice in its on-disk cache: after
   a 2 × 2 image, 4096 × 4096 FP32 ran in 1984 µs instead of 312 µs. Static compilation
   raises the recompile limit for each new shape and fails loudly if the limit is reached,
-  rather than silently falling back to eager mode. Compilation happens in the warmup and
-  is never timed.
+  rather than silently falling back to eager mode (shared helper:
+  [lab/compile.py](../../../lab/compile.py)). Compilation happens in the warmup and is never
+  timed.
 
 All kernels compute in FP32 with float literals (`0.299f`, …): double literals would
 promote the expression to FP64, which is off-contract and far slower on this GPU.

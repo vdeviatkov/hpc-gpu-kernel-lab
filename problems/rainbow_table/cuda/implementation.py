@@ -16,6 +16,6 @@ IMPLEMENTED = False
 def rainbow_table(x, rounds):
     if not IMPLEMENTED:
         raise NotImplementedError("rainbow_table: CUDA backend not implemented (cuda/kernels.cu)")
-    out = torch.empty_like(x)
+    out = torch.empty(x.shape, dtype=torch.uint32, device=x.device)
     load_extension("gpu_lab_rainbow_table", Path(__file__).parent).rainbow_table(x, rounds, out)
     return out

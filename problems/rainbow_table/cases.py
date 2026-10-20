@@ -14,10 +14,34 @@ from lab.data import element_size
 
 INT32_MIN, INT32_MAX = -(2**31), 2**31 - 1
 
-TAIL_SIZES = [0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 33, 255, 256, 257, 1025]
+TAIL_SIZES = [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    7,
+    8,
+    9,
+    15,
+    16,
+    17,
+    31,
+    33,
+    255,
+    256,
+    257,
+    511,
+    512,
+    513,
+    1023,
+    1024,
+    1025,
+]
 TEST_CASES = (
     [{"n": n, "rounds": 1, "dist": "source"} for n in TAIL_SIZES]
-    + [{"n": 1000, "rounds": r, "dist": "source"} for r in (0, 2, 3, 10, 50, 100)]
+    + [{"n": 1000, "rounds": r, "dist": "source"} for r in (0, 2, 3, 10, 50, 100, 101)]
     # The source's own functional sizes, with negative inputs as well.
     + [
         {"n": 1024, "rounds": 50, "dist": "full"},

@@ -77,24 +77,32 @@ Iterated hashing provides an integer-heavy contrast to bandwidth-dominated float
 
 - [x] PyTorch correctness reference (the source's int64 algorithm) and a `torch.compile`
   baseline (int32, all rounds fused)
-- [ ] CUDA straightforward baseline
-- [ ] CUDA named optimization variants
+- [x] CUDA straightforward baseline
+- [x] CUDA named optimization variants
+- [x] Triton looped and statically unrolled kernels
 
-CUDA receives the algorithm work; PyTorch supplies an exact/reference path. Triton and JAX are deferred because integer dependency analysis or irregular partitioning is the primary lesson, rather than backend coverage.
+Backend coverage now includes Triton for direct comparison of the same unsigned hash.
+All implementations return a fresh uint32 tensor, including zero rounds and empty inputs.
 
-Scaffold: every stub raises `NotImplementedError` until it is implemented.
-Run the tests with `python -m pytest problems/rainbow_table` and benchmark with
-`python -m lab.bench rainbow_table`.
+| Backend | Mechanism |
+|---|---|
+| `pytorch` | int64 reference with explicit masks |
+| `pytorch_int32` | eager int32 arithmetic with wrapping multiplication |
+| `pytorch_compile` | compiled int32 hash, all rounds fused |
+| `cuda`, `cuda_u32` | one uint32 chain per thread |
+| `cuda_int64` | reference arithmetic in int64 |
+| `cuda_ilp2`, `cuda_ilp` | two or four interleaved chains, coalesced scalar accesses |
+| `cuda_vec` | four chains with aligned 16-byte loads/stores; scalar ILP fallback for misalignment |
+| `cuda_unroll` | fully unrolled R = 0, 1, 2, 3, 5, 10, 20, 50, 100; runtime loop otherwise |
+| `triton` | tiled uint32 arithmetic with a runtime round loop |
+| `triton_unroll` | statically unrolled rounds |
 
-```text
-rainbow_table/
-    README.md   study plan and status
-    api.py      public entry point and verified contract
-    cases.py    lengths (every n mod 8), round counts, value distributions, R sweep
-    pytorch/    reference (source algorithm, int64) and torch.compile baseline
-    cuda/       kernels.cu, bindings.cpp, implementation.py (stubs)
-    tests/      test_rainbow_table.py
-```
+CUDA accepts `threads=128/256/512` (default 256). Triton accepts `block_size`
+(default 256) and `num_warps` (default 4). Unrolling large round counts can increase
+compilation time and generated code size.
+
+Run correctness checks with `python -m pytest problems/rainbow_table` and benchmarks
+with `python -m lab.bench rainbow_table` on NVIDIA hardware with CUDA and Triton installed.
 
 ## Optimization roadmap
 
@@ -127,10 +135,11 @@ Separate source conformance from broader shape/dtype experiments. Use the
 
 ## Status
 
-⬜ **Planned**
+🟨 **In Progress**
 
-No accepted implementation or measured results for this curriculum entry.
-Results pending hardware benchmark.
+Implemented PyTorch, CUDA and Triton variants. CPU correctness tests pass locally;
+CUDA compilation, GPU correctness, Compute Sanitizer and performance remain unverified
+on NVIDIA hardware. Results pending hardware benchmark.
 
 Follow the [optimization methodology](../../docs/methodology.md). When work
 begins, add evidence and update the [roadmap status](../../README.md#roadmap).

@@ -80,7 +80,7 @@ def test_source_functional_inputs(backend, name):
     assert run(backend, values, rounds).tolist() == python_hashes(values, rounds)
 
 
-@pytest.mark.parametrize("rounds", [0, 1, 2, 7])
+@pytest.mark.parametrize("rounds", [0, 1, 2, 7, 101])
 @pytest.mark.parametrize("backend", api.BACKENDS)
 def test_python_oracle(backend, rounds):
     """Edge values and random int32 patterns against plain Python, independent of PyTorch."""
@@ -153,3 +153,9 @@ def test_rejects_unknown_backend():
     args = cases.make_inputs(cases.TEST_CASES[0], Sampler(torch.int32, "cpu"))
     with pytest.raises(ValueError, match="unknown backend"):
         api.rainbow_table(*args, backend="invalid")
+
+
+def test_rejects_unknown_pytorch_method():
+    x = torch.arange(4, dtype=torch.int32)
+    with pytest.raises(ValueError, match="unknown rainbow_table method"):
+        api.rainbow_table(x, 1, method="invalid")

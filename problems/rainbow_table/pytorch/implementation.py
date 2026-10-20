@@ -62,4 +62,8 @@ def rainbow_table(x, rounds, *, method="reference"):
     if method == "compile":
         # clone: with rounds = 0 the compiled function would return a view of x.
         return _compiled(x, rounds) if rounds else x.view(torch.uint32).clone()
+    if method == "int32":
+        return _hash_int32(x, rounds) if rounds else x.view(torch.uint32).clone()
+    if method != "reference":
+        raise ValueError(f"unknown rainbow_table method: {method}")
     return _reference(x, rounds)

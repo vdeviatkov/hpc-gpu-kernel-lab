@@ -27,7 +27,19 @@ VARIANTS = {
     # torch.compile of the hash in 32-bit integers: all R rounds fused into one kernel.
     "pytorch_compile": ("pytorch", {"method": "compile"}),
 }
-BACKENDS = ("pytorch", *VARIANTS, "cuda")
+VARIANTS.update(
+    {
+        "pytorch_int32": ("pytorch", {"method": "int32"}),
+        "cuda_int64": ("cuda", {"variant": 0}),
+        "cuda_u32": ("cuda", {"variant": 1}),
+        "cuda_ilp2": ("cuda", {"variant": 2}),
+        "cuda_ilp": ("cuda", {"variant": 3}),
+        "cuda_vec": ("cuda", {"variant": 4}),
+        "cuda_unroll": ("cuda", {"variant": 5}),
+        "triton_unroll": ("triton", {"unroll": True}),
+    }
+)
+BACKENDS = ("pytorch", *VARIANTS, "cuda", "triton")
 # The input dtype; the output is always uint32.
 DTYPES = {
     "int32": torch.int32,

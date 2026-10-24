@@ -128,3 +128,20 @@ def test_rejects_unknown_backend():
     args = cases.make_inputs(cases.TEST_CASES[0], Sampler(torch.float32, "cpu"))
     with pytest.raises(ValueError, match="unknown backend"):
         api.rgb_to_grayscale(*args, backend="invalid")
+
+
+@pytest.mark.parametrize("dtype", api.DTYPES)
+@pytest.mark.parametrize("block_size,num_warps", [(64, 1), (128, 4), (256, 8), (1024, 4)])
+def test_triton_launch_configuration(dtype, block_size, num_warps):
+    """Grid coverage depends on all pixels, including wide rows and the final partial tile."""
+    skip_if_unavailable("triton", api)
+    skip_unsupported_dtype(api.DTYPES[dtype])
+    (image,) = cases.make_inputs(
+        {"h": 3, "w": 1027, "dist": "int"}, Sampler(api.DTYPES[dtype], device())
+    )
+    actual = api.rgb_to_grayscale(
+        image, backend="triton", block_size=block_size, num_warps=num_warps
+    )
+    expected = api.rgb_to_grayscale(image)
+    rtol, atol = api.TOLERANCES[api.DTYPES[dtype]]
+    torch.testing.assert_close(actual, expected, rtol=rtol, atol=atol)

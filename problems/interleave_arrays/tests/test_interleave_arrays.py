@@ -121,3 +121,14 @@ def test_rejects_unknown_backend():
     args = cases.make_inputs(cases.TEST_CASES[0], Sampler(torch.float32, "cpu"))
     with pytest.raises(ValueError, match="unknown backend"):
         api.interleave(*args, backend="invalid")
+
+
+@pytest.mark.parametrize("dtype", api.DTYPES)
+@pytest.mark.parametrize("block_size,num_warps", [(64, 1), (128, 4), (256, 8), (1024, 4)])
+def test_triton_launch_configuration(dtype, block_size, num_warps):
+    """Changing the tile/warp layout must preserve interleaving across a partial tile."""
+    skip_if_unavailable("triton", api)
+    skip_unsupported_dtype(api.DTYPES[dtype])
+    a, b = cases.make_inputs({"n": 2051, "dist": "normal"}, Sampler(api.DTYPES[dtype], device()))
+    actual = api.interleave(a, b, backend="triton", block_size=block_size, num_warps=num_warps)
+    torch.testing.assert_close(actual, torch.stack((a, b), dim=1).reshape(-1), rtol=0, atol=0)

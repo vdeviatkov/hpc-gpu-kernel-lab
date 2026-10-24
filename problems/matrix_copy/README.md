@@ -4,12 +4,17 @@
 
 LeetGPU: [Matrix Copy](https://leetgpu.com/challenges/matrix-copy)
 
-Catalog title and difficulty verified on 2026-09-12.
+Catalog title and difficulty verified on 2026-09-12; contract verified on
+2026-10-23 against the LeetGPU challenge source (`challenges/easy/31_matrix_copy`).
 
-This is an original study plan, not a reproduction of the source statement.
-For LeetGPU work, confirm the current signature, layout, dtype, and boundary
-contract on the linked page before writing a reference. Any broader lab variant
-must be labeled separately.
+**Source contract:** copy an N x N row-major float32 matrix, `B[i][j] = A[i][j]`,
+1 ≤ N ≤ 4096; performance is measured at N = 4096. The source checker allows
+1e-5 tolerance; here every backend must match bit for bit, NaN payloads and
+signed zeros included.
+
+**Lab extensions** (labeled separately): rectangular M x N, empty matrices,
+N > 4096, and fp16/bf16 elements. The API returns a new tensor rather than
+writing into a caller's `B`, and accepts contiguous inputs only.
 
 ## Prerequisites
 
@@ -35,14 +40,14 @@ A copy is a control experiment for transpose and stencil studies; its bandwidth 
 
 ## Planned implementations
 
-- [ ] PyTorch correctness reference and meaningful baseline
+- [x] PyTorch correctness reference and meaningful baseline (`clone`, a device-to-device memcpy)
 - [ ] CUDA straightforward baseline
 - [ ] CUDA named optimization variants
 - [ ] Triton implementation with explicit tile/warp choices
 
 CUDA and Triton provide useful low-level contrasts against PyTorch. JAX is deferred until it would answer a distinct compiler or performance question rather than duplicate coverage.
 
-Scaffold: every stub raises `NotImplementedError` until it is implemented.
+CUDA and Triton are still stubs that raise `NotImplementedError`; their tests skip.
 Run the tests with `python -m pytest problems/matrix_copy` and benchmark with
 `python -m lab.bench matrix_copy`.
 
@@ -51,7 +56,7 @@ matrix_copy/
     README.md  study plan and status
     api.py     public entry point and draft contract
     cases.py   test and benchmark inputs, bytes and FLOPs
-    pytorch/   reference (stub)
+    pytorch/   reference: clone (cudaMemcpyAsync on the GPU)
     cuda/      kernels.cu, bindings.cpp, implementation.py (stubs)
     triton/    Triton kernel (stub)
     tests/     test_matrix_copy.py
@@ -88,9 +93,11 @@ Separate source conformance from broader shape/dtype experiments. Use the
 
 ## Status
 
-⬜ **Planned**
+🟨 **In Progress**
 
-No accepted implementation or measured results for this curriculum entry.
+Contract, cases, PyTorch reference and tests are done. The tests cover the source
+examples and functional inputs, special bit patterns, fresh output, misaligned
+input, tails and empty matrices. CUDA and Triton are not implemented.
 Results pending hardware benchmark.
 
 Follow the [optimization methodology](../../docs/methodology.md). When work

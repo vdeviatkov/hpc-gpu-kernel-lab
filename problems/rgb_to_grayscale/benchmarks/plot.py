@@ -26,6 +26,7 @@ BACKENDS = (
     "cuda_vec",
     "cuda_smem",
     "cuda_planar",
+    "triton",
 )
 SIZES = (
     (2048, "2048 × 2048 (source size): FP16 fits in L2"),
@@ -49,10 +50,10 @@ def bandwidths(paths):
     return {key: statistics.median(v) for key, v in values.items()}, gpu
 
 
-def plot(data, gpu, output):
+def plot(data, gpu, output, subtitle=""):
     t = STYLE
     plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10, "svg.fonttype": "path"})
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4.0), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.4), sharey=True)
     fig.patch.set_facecolor(t["surface"])
     rows = list(reversed(BACKENDS))
     top = max(data.values())
@@ -108,8 +109,14 @@ def plot(data, gpu, output):
         fontsize=12,
         fontweight="bold",
     )
-    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    fig.tight_layout(rect=(0, 0.035, 1, 0.97))
+    if subtitle:
+        fig.text(0.012, 0.015, subtitle, fontsize=8, color=t["muted"])
     fig.savefig(output, facecolor=t["surface"])
+    if output.suffix.lower() == ".svg":
+        output.write_text(
+            "\n".join(line.rstrip() for line in output.read_text().splitlines()) + "\n"
+        )
     plt.close(fig)
 
 
@@ -123,4 +130,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    plot(*bandwidths(args.inputs), args.output)
+    dates = sorted(
+        {json.loads(p.read_text())["environment"]["timestamp_utc"][:10] for p in args.inputs}
+    )
+    subtitle = (
+        f"{', '.join(dates)} UTC · median of {len(args.inputs)} runs · all backends incl. Triton"
+    )
+    plot(*bandwidths(args.inputs), args.output, subtitle)

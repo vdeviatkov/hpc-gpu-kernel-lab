@@ -3,36 +3,62 @@
 [← Interleave Arrays](../README.md) · [Design](design.md) · **Results** ·
 [Testing](testing.md) · [Benchmarking](benchmarking.md) · [Profiling](profiling.md)
 
-**Setup:** NVIDIA RTX 5080 (64 MiB L2, DRAM peak 960 GB/s), CUDA 13.2, PyTorch 2.14.1,
-stock clocks, idle GPU. Each number is the median of 100 samples after 25 warmups, taken
-as the median of three full runs (spread between runs ≤ 0.4% for every backend at
-N ≥ 25M). Timing uses CUDA events around one call, including output allocation. Inputs
-are normally distributed. Measured from commit `0e9f2ef` plus the CUDA kernels and the
-`pytorch_stack` baseline. Commands are in [benchmarking](benchmarking.md).
+**Benchmark session:** 2026-10-23 PDT (2026-10-24 UTC), cuda.0, RTX 5080,
+CUDA toolkit 13.4.92, PyTorch 2.14.1+cu130, Triton 3.8.0, driver 615.71.09.
+**All backends, including Triton, were remeasured together.** Current benchmark
+tables use the median of three run medians, each from 100 CUDA-event samples after
+25 warmups. Timing includes output allocation and call submission; compilation
+is excluded. Inputs are reused, clocks are unlocked, and the desktop uses the GPU.
+Each benchmark case passed its correctness gate before timing.
+
+The updated chart uses this same session. The older CUDA/PyTorch Nsight analysis
+is retained in [Why the variants differ](#why-the-variants-differ), explicitly
+separate from these new call timings. Compact per-run evidence and source hashes:
+[measured_summary.json](../benchmarks/measured_summary.json). Raw samples and
+full environment are in `artifacts/perf_20261023/interleave_arrays/device_{1,2,3}.json`.
 
 ## DRAM-bound sizes
 
-Latency in µs, lower is better; percentage of copy speed in brackets. The copy reference
-copies both inputs, the same bytes the kernels move.
+Latency in µs (lower is better); parentheses give the median fraction of a
+same-run copy of both inputs. Copy and interleave move the same logical bytes.
 
 | N = 25,000,000 | FP32 | FP16 | BF16 |
 |---|---:|---:|---:|
-| copy of both inputs (target) | 488.0 | 243.2 | 243.3 |
-| `pytorch` (reference) | 1370.3 (36%) | 685.7 (35%) | 685.7 (35%) |
-| `pytorch_stack` | 1353.2 (36%) | 687.5 (35%) | 686.6 (35%) |
-| `cuda_input` | 493.9 (99%) | 248.3 (98%) | 249.0 (98%) |
-| `cuda_output` | 494.1 (99%) | **403.0 (60%)** | **402.3 (61%)** |
-| `cuda_pair_store` | 494.4 (99%) | **247.5 (98%)** | **247.5 (98%)** |
-| `cuda_vec` | 495.9 (98%) | 250.4 (97%) | 250.4 (97%) |
+| copy reference | 488.896 | 244.256 | 244.320 |
+| `pytorch` | 1384.544 (35.2%) | 691.168 (35.3%) | 690.208 (35.4%) |
+| `pytorch_stack` | 1363.952 (35.8%) | 691.392 (35.3%) | 689.760 (35.4%) |
+| `cuda_input` | 497.008 (98.3%) | 249.472 (97.9%) | 249.472 (97.9%) |
+| `cuda_output` | 493.152 (99.1%) | 403.040 (60.6%) | 403.088 (60.6%) |
+| `cuda_pair_store` | 492.976 (99.0%) | 249.440 (97.9%) | 248.352 (98.4%) |
+| `cuda_vec` | 497.264 (98.3%) | 249.408 (97.9%) | 249.456 (97.9%) |
+| `triton` | 498.240 (98.1%) | 251.248 (97.2%) | 250.608 (97.5%) |
 
-At N = 50,000,000 (the contract maximum) the picture is identical: the FP32 kernels at
-99% of a copy (975.4 µs), `cuda_output` FP16 at 61% (795.9 vs 486.9 µs), PyTorch at 36%.
+| N = 50,000,000 | FP32 | FP16 | BF16 |
+|---|---:|---:|---:|
+| copy reference | 980.592 | 488.976 | 488.048 |
+| `pytorch` | 2777.248 (35.4%) | 1376.736 (35.4%) | 1372.256 (35.6%) |
+| `pytorch_stack` | 2771.488 (35.4%) | 1398.304 (35.0%) | 1394.800 (35.0%) |
+| `cuda_input` | 983.088 (99.7%) | 495.952 (98.6%) | 495.232 (98.5%) |
+| `cuda_output` | 989.056 (99.1%) | 796.176 (61.4%) | 796.144 (61.3%) |
+| `cuda_pair_store` | 978.736 (100.0%) | 493.152 (98.8%) | 495.136 (98.7%) |
+| `cuda_vec` | 989.392 (99.1%) | 497.184 (98.3%) | 496.240 (98.4%) |
+| `triton` | 992.752 (98.8%) | 497.168 (98.2%) | 497.024 (98.4%) |
 
-- In FP32 all four CUDA kernels are within 1.6% of a copy: the mapping barely matters.
-- In FP16/BF16 only `cuda_output` falls behind, by 40%.
-- Both PyTorch baselines take 2.8× as long as a copy.
+Triton reaches **97–98% of copy speed** at N=25M: 498.240 µs FP32,
+251.248 µs FP16 and 250.608 µs BF16. It is within about 1% of `cuda_vec` there.
+At N=50M it takes 992.752 / 497.168 / 497.024 µs, again about 98% of copy speed.
+The two-byte `cuda_output` disadvantage remains; Triton's contiguous output tile
+avoids that mapping's performance loss without requiring aligned inputs.
+
+Triton's run-median range at N≥25M is at most **0.4%** of its median. These small
+CUDA/Triton differences are not evidence of a large kernel-design advantage.
 
 ## Why the variants differ
+
+**Historical profiler evidence:** the Nsight counters and kernel-only timings in
+this section are from the earlier CUDA 13.2 CUDA/PyTorch study. Triton was not
+captured in that study; the new benchmark tables above do not imply new Nsight
+measurements.
 
 Nsight Compute, one launch per report, N = 25M ([how to capture and read](profiling.md)).
 ncu locks clocks and flushes caches, so its durations differ from the table above; compare
@@ -106,15 +132,38 @@ limit, instructions are almost free.
 
 ## Small inputs
 
-At N = 1025 every backend is launch-bound: 10.4–10.7 µs for the CUDA kernels, 10.7–11.1 µs
-for the reference, 7.8 µs for `pytorch_stack` (one kernel). The copy reference makes two
-launches here (8.6–8.7 µs), so compare small sizes in µs rather than percent of copy. At
-N = 1M FP16, `cuda_output` again trails (16.4 µs against 12.1–12.3 µs for the other CUDA
-kernels).
+Complete-call latency in µs. The two-copy reference uses two launches, so a
+fraction-of-copy comparison is less useful here than absolute latency.
+
+| N = 1,025 | FP32 | FP16 | BF16 |
+|---|---:|---:|---:|
+| copy reference | 8.848 | 8.704 | 8.800 |
+| `pytorch` | 10.832 | 10.784 | 10.816 |
+| `pytorch_stack` | 7.648 | 7.648 | 7.680 |
+| `cuda_input` | 10.656 | 10.432 | 10.400 |
+| `cuda_output` | 10.528 | 10.368 | 10.368 |
+| `cuda_pair_store` | 10.592 | 10.304 | 10.432 |
+| `cuda_vec` | 10.656 | 10.432 | 10.432 |
+| `triton` | 13.216 | 13.120 | 13.216 |
+
+| N = 1,048,576 | FP32 | FP16 | BF16 |
+|---|---:|---:|---:|
+| copy reference | 8.896 | 9.024 | 8.960 |
+| `pytorch` | 16.256 | 13.056 | 12.784 |
+| `pytorch_stack` | 25.456 | 17.376 | 17.408 |
+| `cuda_input` | 14.336 | 14.256 | 14.256 |
+| `cuda_output` | 14.304 | 16.352 | 20.272 |
+| `cuda_pair_store` | 14.256 | 12.256 | 12.256 |
+| `cuda_vec` | 14.368 | 12.224 | 12.256 |
+| `triton` | 15.296 | 13.312 | 13.248 |
+
+Triton takes about 13 µs at N=1025; fixed call and launch costs dominate.
 
 ## Decisions
 
-- **`cuda_pair_store` is the recommended kernel:** at copy speed for every dtype, full
+- **Triton is a competitive portable option:** about 98% of copy speed at large
+  sizes, close to the CUDA kernels across all three dtypes.
+- **`cuda_pair_store` remains the recommended CUDA kernel:** at copy speed for every dtype, full
   sectors per store instruction, no alignment requirement (the output is freshly
   allocated), and the simplest code. `cuda_input` and `cuda_vec` are equally fast;
   `cuda_vec`'s 4× fewer instructions buy nothing here.
@@ -127,16 +176,26 @@ kernels).
 
 ## Validation
 
-- Test suite on the RTX 5080: **617 passed**; 117 skipped are the deferred Triton backend
-  ([testing](testing.md)).
+- Original CUDA/PyTorch study on RTX 5080: **617 passed**, 117 skipped before
+  Triton was implemented. Current Triton validation is documented below.
 - Compute Sanitizer memcheck: **0 errors** in 468 CUDA tests, including misaligned inputs
   that exercise `cuda_vec`'s fallback.
 
 ## Limitations
 
 - One desktop GPU with unlocked clocks; buffers are reused between samples.
-- Triton is deferred.
+- The benchmark tables and figure include Triton; the historical Nsight analysis
+  covers CUDA/PyTorch only.
 - The `cuda_output` fix above is a hypothesis, not measured.
 
-Raw JSON and the Nsight reports are in `results/rtx5080/` (not tracked by Git);
-[sweep.sh](../benchmarks/sweep.sh) regenerates both.
+Historical raw JSON and Nsight reports are in `results/rtx5080/` (not tracked by
+Git). New benchmark JSON is in `artifacts/perf_20261023/interleave_arrays/`.
+See [benchmarking](benchmarking.md) for reproduction.
+
+## Triton implementation follow-up (2026-10-23)
+
+The explicit Triton backend is now implemented. Combined GPU validation for
+problems 4 and 5: **1,373 passed, no skips**. Triton-only memcheck: **227 passed,
+zero errors**. See [testing](testing.md#triton-validation-2026-10-23) for commands
+and coverage. The same-day performance follow-up now includes three matched
+all-backend runs in the tables and chart above.

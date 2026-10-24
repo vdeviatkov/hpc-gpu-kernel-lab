@@ -4,17 +4,23 @@
 data-movement kernel for studying how to map threads when reads and writes have different
 shapes, and why every 32-byte sector should be written in one go.
 
-**Status:** ✅ Complete (CUDA and PyTorch; Triton deferred) · validated and measured on
+**Status:** ✅ Complete (CUDA, PyTorch and Triton) · validated and measured on
 NVIDIA GeForce RTX 5080 · primary lesson: **lane-to-output mapping** · prerequisite:
 [01 · Vector Addition](../vector_add/README.md).
 
-![Interleave Arrays speed relative to a device copy of both inputs at N = 25M on RTX 5080. cuda_input, cuda_pair_store and cuda_vec reach 97–99% of copy speed in FP32 and FP16; cuda_output reaches 98.8% in FP32 but 60.4% in FP16; both PyTorch baselines reach about 35–36%.](figures/interleave_vs_copy.svg)
+![Updated three-run interleave comparison including Triton: at N=25M, Triton reaches 97–98% of copy speed.](figures/interleave_vs_copy.svg)
+
+The figure and benchmark tables include three matched runs of every backend,
+including Triton (2026-10-23 PDT / 2026-10-24 UTC). Earlier Nsight findings are
+labeled separately in [results](docs/results.md).
 
 ## Key results
 
 RTX 5080, N = 25M (DRAM-bound). A device copy of both inputs moves the same bytes, so it is
 the practical speed limit. Details are in [results](docs/results.md).
 
+- **Triton is close to the CUDA kernels:** at N=25M it takes 498.2 / 251.2 /
+  250.6 µs in FP32/FP16/BF16, about 97–98% of same-run copy speed.
 - **Thread-per-input mapping works for every dtype:** `cuda_input`, `cuda_pair_store` and
   `cuda_vec` reach 97–99% of copy speed. Stride-2 stores cost nothing when the same warp
   fills both halves of each 32-byte sector, because the sector is complete in L2 before
@@ -55,7 +61,7 @@ from problems.interleave_arrays.api import interleave
 
 a = torch.tensor([1.0, 2.0, 3.0], device="cuda")
 b = torch.tensor([4.0, 5.0, 6.0], device="cuda")
-# Backends: pytorch, pytorch_stack, cuda_input, cuda_output, cuda_pair_store, cuda_vec
+# Backends: pytorch, pytorch_stack, cuda_input, cuda_output, cuda_pair_store, cuda_vec, triton
 interleave(a, b, backend="cuda_pair_store")  # [1, 4, 2, 5, 3, 6]
 ```
 
@@ -68,7 +74,7 @@ interleave_arrays/
 ├── cases.py         sizes (every N mod 8) and value distributions
 ├── pytorch/         reference (two strided copies) and torch.stack baseline
 ├── cuda/            input, output, pair-store and vec kernels, bindings, loader
-├── triton/          stub: Triton deferred
+├── triton/          tiled loads, register interleave, contiguous output stores
 ├── tests/           source examples, output order, offsets, every backend vs the reference
 ├── benchmarks/      sweep.sh (benchmarks + Nsight reports), plot.py
 ├── figures/         generated chart (tracked)

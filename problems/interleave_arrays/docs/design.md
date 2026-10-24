@@ -71,9 +71,14 @@ start mid-allocation); the remaining `N mod k` elements are written by one extra
 The shared helpers `Pack`, `load_pack`, `store_pack` and `pack_aligned` come from
 `lab/vector.cuh`.
 
-**Triton is deferred.** It was planned (a strided-store kernel and one using
-`tl.interleave`) but skipped by decision; the stub stays, and its tests skip as "not
-implemented".
+**Triton:** each program loads `block_size` elements from each input, uses
+[`tl.interleave`](https://triton-lang.org/main/python-api/generated/triton.language.interleave.html)
+to arrange pairs in registers, and stores one contiguous tile of `2 * block_size`
+output elements. Masks protect the partial tile; empty inputs allocate an empty
+output without a launch. FP32/FP16/BF16 values are moved without arithmetic.
+Storage-offset inputs need no alignment fallback. Defaults are `block_size=1024`
+and `num_warps=4`, with explicit launch options and no autotuning.
+Implementation: [Triton](../triton/implementation.py).
 
 Source: [CUDA kernels](../cuda/kernels.cu), [bindings](../cuda/bindings.cpp),
 [PyTorch](../pytorch/implementation.py).

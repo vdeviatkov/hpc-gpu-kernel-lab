@@ -103,7 +103,13 @@ bandwidth reference rather than a time to reach. Compare GB/s, not percent of co
 All kernels compute in FP32 with float literals (`0.299f`, …): double literals would
 promote the expression to FP64, which is off-contract and far slower on this GPU.
 
-**Triton** is not implemented yet: the stub stays, and its tests skip as "not implemented".
+**Triton:** one program processes `block_size` pixels from the flattened `H * W`
+image. Three masked loads read R/G/B; values are converted to FP32 before the
+weighted sum and rounded once on store to the input dtype. The grid covers all
+pixels, independent of row shape. Empty images allocate output without launching.
+Misaligned images use the same masked kernel. Defaults are `block_size=1024` and
+`num_warps=4`; both are explicit options, with no autotuning.
+Implementation: [Triton](../triton/implementation.py).
 
 Source: [CUDA kernels](../cuda/kernels.cu), [bindings](../cuda/bindings.cpp),
 [PyTorch](../pytorch/implementation.py).

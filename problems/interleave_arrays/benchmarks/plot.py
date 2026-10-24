@@ -25,6 +25,7 @@ BACKENDS = (
     "cuda_output",
     "cuda_pair_store",
     "cuda_vec",
+    "triton",
 )
 SERIES = (("fp32", "FP32", "#2a78d6", "o"), ("fp16", "FP16", "#eb6834", "D"))
 STYLE = {"surface": "#fcfcfb", "text": "#0b0b0b", "muted": "#52514e", "grid": "#e4e3df"}
@@ -44,10 +45,10 @@ def fractions(paths):
     return {key: statistics.median(v) for key, v in values.items()}, gpu
 
 
-def plot(data, gpu, output):
+def plot(data, gpu, output, subtitle=""):
     t = STYLE
     plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10, "svg.fonttype": "path"})
-    fig, ax = plt.subplots(figsize=(8.2, 3.8))
+    fig, ax = plt.subplots(figsize=(8.2, 4.2))
     fig.patch.set_facecolor(t["surface"])
     ax.set_facecolor(t["surface"])
     rows = list(reversed(BACKENDS))
@@ -92,7 +93,7 @@ def plot(data, gpu, output):
     ax.axvline(1.0, color=t["muted"], linewidth=1, linestyle=(0, (4, 3)), zorder=1)
     ax.text(0.99, len(rows) - 0.4, "copy speed", ha="right", fontsize=8, color=t["muted"])
     ax.set_yticks(range(len(rows)), rows)
-    ax.set_xlim(0, 1.04)
+    ax.set_xlim(0, max(1.04, max(data.values()) * 1.03))
     ax.set_xticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
     ax.xaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
     ax.set_ylim(-0.6, len(rows) - 0.05)
@@ -126,8 +127,14 @@ def plot(data, gpu, output):
         fontsize=12,
         fontweight="bold",
     )
-    fig.tight_layout(rect=(0, 0, 0.83, 0.95))
+    fig.tight_layout(rect=(0, 0.035, 0.83, 0.95))
+    if subtitle:
+        fig.text(0.012, 0.015, subtitle, fontsize=8, color=t["muted"])
     fig.savefig(output, facecolor=t["surface"])
+    if output.suffix.lower() == ".svg":
+        output.write_text(
+            "\n".join(line.rstrip() for line in output.read_text().splitlines()) + "\n"
+        )
     plt.close(fig)
 
 
@@ -141,4 +148,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    plot(*fractions(args.inputs), args.output)
+    dates = sorted(
+        {json.loads(p.read_text())["environment"]["timestamp_utc"][:10] for p in args.inputs}
+    )
+    subtitle = (
+        f"{', '.join(dates)} UTC · median of {len(args.inputs)} runs · all backends incl. Triton"
+    )
+    plot(*fractions(args.inputs), args.output, subtitle)

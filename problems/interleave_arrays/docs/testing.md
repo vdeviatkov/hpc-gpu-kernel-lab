@@ -15,7 +15,7 @@ clang-format --dry-run --Werror problems/interleave_arrays/cuda/*.{cpp,cu}
 ```
 
 Without an NVIDIA GPU the CUDA tests skip; the reference, `pytorch_stack` and contract
-tests still run. The Triton tests always skip ("not implemented"): Triton is deferred.
+tests still run. Triton tests run on NVIDIA hardware when Triton is installed.
 
 ## What is tested
 
@@ -45,3 +45,21 @@ compute-sanitizer --tool memcheck python -m pytest -q problems/interleave_arrays
 ```
 
 The latest outcome is in [results](results.md#validation).
+
+## Triton validation (2026-10-23)
+
+On cuda.0 (RTX 5080, Triton 3.8.0), the combined problem 4 and 5 suites passed
+**1,373 tests with no skips**. This includes FP32/FP16/BF16, empty inputs,
+misalignment/storage offsets, tails, and added tile/warp configurations
+`(64,1)`, `(128,4)`, `(256,8)` and `(1024,4)`.
+
+```bash
+python -m pytest -q problems/interleave_arrays problems/rgb_to_grayscale
+compute-sanitizer --tool memcheck --target-processes all --error-exitcode 99 \
+  python -m pytest -q problems/interleave_arrays problems/rgb_to_grayscale -k triton
+```
+
+Memcheck: **227 passed, 1,146 deselected; zero errors**. Logs are in
+`artifacts/triton_04_05_20261023/` locally and
+`/tmp/hpc-triton-04-05-20261023/artifacts/` on cuda.0. The remote run used an
+isolated copy so the existing remote checkout was not changed.

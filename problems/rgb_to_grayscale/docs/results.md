@@ -3,57 +3,77 @@
 [← RGB to Grayscale](../README.md) · [Design](design.md) · **Results** ·
 [Testing](testing.md) · [Benchmarking](benchmarking.md) · [Profiling](profiling.md)
 
-**Setup:** NVIDIA RTX 5080 (64 MiB L2, DRAM peak 960 GB/s), CUDA 13.2, PyTorch 2.14.1,
-stock clocks, idle GPU. Each number is the median of 100 samples after 25 warmups, taken
-as the median of three full runs (spread between runs ≤ 0.7% at 4096², ≤ 1.2 µs at 2048²).
-One sample is one Python call timed with CUDA events, including output allocation.
-Integer inputs 0–255. Measured from commit `210fbb8` plus the static-shape
-`pytorch_compile` change. Commands are in [benchmarking](benchmarking.md).
+**Benchmark session:** 2026-10-23 PDT (2026-10-24 UTC), cuda.0, RTX 5080,
+CUDA toolkit 13.4.92, PyTorch 2.14.1+cu130, Triton 3.8.0, driver 615.71.09.
+**All backends, including Triton, were remeasured together.** Current benchmark
+tables use the median of three run medians, each from 100 CUDA-event samples after
+25 warmups. Timing includes output allocation and call submission; compilation
+is excluded. Inputs are reused, clocks are unlocked, and the desktop uses the GPU.
+Each benchmark case passed its correctness gate before timing.
+
+The updated chart uses this same session. The older CUDA/PyTorch Nsight analysis
+is retained in [Why the variants differ](#why-the-variants-differ), explicitly
+separate from these new call timings. Compact per-run evidence and source hashes:
+[measured_summary.json](../benchmarks/measured_summary.json). Raw samples and
+full environment are in `artifacts/perf_20261023/rgb_to_grayscale/device_{1,2,3}.json`.
 
 ## DRAM-bound: 4096 × 4096
 
-Latency in µs, lower is better; effective bandwidth (`4·P·s` per second) in brackets.
+Latency in µs (lower is better); effective logical bandwidth in parentheses.
+RGB kernels move `4·P·s` bytes. The image-copy control moves `6·P·s`, 1.5× as much,
+so compare bandwidth rather than raw latency with the copy.
 
 | 4096 × 4096 | FP32 | FP16 | BF16 |
 |---|---:|---:|---:|
-| copy of the image (moves 1.5× the bytes) | 491.0 (820 GB/s) | 244.3 (824) | 244.1 (825) |
-| `pytorch` (reference) | 1410.9 (190) | 1878.1 (71) | 1878.0 (71) |
-| `pytorch_matmul` | 567.9 (473) | 452.9 (296) | 454.1 (296) |
-| `pytorch_compile` | 321.8 (834) | 165.9 (809) | 166.0 (809) |
-| `cuda_pixel` | 315.2 (852) | 159.3 (842) | 159.3 (842) |
-| `cuda_vec` | 318.0 (844) | 161.7 (830) | 161.5 (831) |
-| `cuda_smem` | **314.8 (853)** | **155.6 (863)** | **155.0 (866)** |
-| `cuda_planar` | 809.4 (332) | 395.8 (339) | 395.8 (339) |
+| copy reference | 491.776 (819 GB/s) | 244.832 (822 GB/s) | 245.296 (821 GB/s) |
+| `pytorch` | 1422.800 (189 GB/s) | 1902.496 (71 GB/s) | 1903.040 (71 GB/s) |
+| `pytorch_matmul` | 569.760 (471 GB/s) | 452.144 (297 GB/s) | 451.152 (298 GB/s) |
+| `pytorch_compile` | 323.552 (830 GB/s) | 166.400 (807 GB/s) | 166.256 (807 GB/s) |
+| `cuda_pixel` | 315.920 (850 GB/s) | 160.192 (838 GB/s) | 160.528 (836 GB/s) |
+| `cuda_vec` | 318.656 (842 GB/s) | 162.992 (823 GB/s) | 145.536 (922 GB/s) |
+| `cuda_smem` | 316.000 (849 GB/s) | 160.352 (837 GB/s) | 161.232 (832 GB/s) |
+| `cuda_planar` | 813.104 (330 GB/s) | 394.864 (340 GB/s) | 361.888 (371 GB/s) |
+| `triton` | 320.912 (836 GB/s) | 164.336 (817 GB/s) | 164.432 (816 GB/s) |
 
-- `cuda_pixel`, `cuda_vec`, `cuda_smem` and `pytorch_compile` are within 2% (FP32) and
-  7% (FP16) of each other, at 84–90% of the DRAM peak, and faster than a copy, which moves
-  more bytes.
-- In the profiler their FP32 kernels take the same time and the FP16 order changes
-  ([below](#1-bytes-every-fused-kernel-is-at-the-lower-bound)): the differences here are
-  per-call overhead and cache state, not kernel design.
-- The eager reference is 4.5× (FP32) to 12× (FP16) slower; `cuda_planar` 2.6×.
+Triton reaches **836 GB/s FP32, 817 GB/s FP16 and 816 GB/s BF16**.
+It is close to scalar CUDA FP32/FP16 at this size. Vector CUDA's BF16 result is
+faster in this session; its three medians are retained in the summary rather than
+explaining the gap using older profiler measurements.
 
-![Effective bandwidth of every backend at 2048 × 2048 and 4096 × 4096 on RTX 5080. At 4096 × 4096 the CUDA kernels and torch.compile reach 809–866 GB/s, below the 960 GB/s DRAM peak; at 2048 × 2048 FP16 cuda_vec reaches 2060 GB/s because the image stays in L2.](../figures/rgb_bandwidth.svg)
+![Updated effective bandwidth including Triton, all backends measured in the same three-run session.](../figures/rgb_bandwidth.svg)
 
 ## The source's size: 2048 × 2048
 
+Latency in µs. The copy row still moves 1.5× the kernel's logical traffic.
+
 | 2048 × 2048 | FP32 | FP16 | BF16 |
 |---|---:|---:|---:|
-| `pytorch` (reference) | 255.5 | 320.6 | 320.4 |
-| `pytorch_matmul` | 150.9 | 113.3 | 119.5 |
-| `pytorch_compile` | 76.3 | 21.2 | 21.2 |
-| `cuda_pixel` | 70.3 | 21.4 | 21.4 |
-| `cuda_vec` | 77.5 | **16.3** | **16.1** |
-| `cuda_smem` | **68.4** | 27.4 | 26.8 |
-| `cuda_planar` | 155.0 | 35.3 | 35.3 |
+| copy reference | 121.152 | 55.584 | 36.544 |
+| `pytorch` | 252.992 | 314.656 | 320.672 |
+| `pytorch_matmul` | 138.144 | 113.536 | 119.712 |
+| `pytorch_compile` | 73.408 | 21.296 | 21.504 |
+| `cuda_pixel` | 69.488 | 21.472 | 22.208 |
+| `cuda_vec` | 69.232 | 16.288 | 16.112 |
+| `cuda_smem` | 72.576 | 27.216 | 26.896 |
+| `cuda_planar` | 158.864 | 35.360 | 35.360 |
+| `triton` | 78.768 | 21.424 | 21.376 |
 
-- **FP32** (67 MB with the output, about the L2's size) still streams from DRAM: the CUDA
-  kernels run at 866–982 GB/s, close to the peak, within 13% of each other.
-- **FP16** (34 MB) stays in L2 between calls, and the variants separate: `cuda_vec` is the
-  fastest at 2060 GB/s effective. These times include about 11 µs of fixed call cost
-  (19.5 µs for `pytorch_compile`); the kernel-only times are in the next section.
+Triton FP16 takes **21.424 µs** (1,566 GB/s effective), compared with
+**16.288 µs** (2,060 GB/s) for `cuda_vec`; Triton is 31.5% slower per call here.
+BF16 is similar: 21.376 versus 16.112 µs. This is a cache-resident regime, so
+bandwidth above the 960 GB/s DRAM peak reflects L2 reuse. The performance gap is
+measured; attributing it to a particular Triton instruction or stall requires a
+new profiler capture. The historical CUDA/PyTorch analysis below explains why
+wide accesses are useful in this regime, without claiming Triton counters.
+
+Triton's run-median spread at 4096² is 0.7% FP32 and 0.2% or less for FP16/BF16;
+at 2048² it is 2.5% FP32 and 0.2% or less for FP16/BF16.
 
 ## Why the variants differ
+
+**Historical profiler evidence:** all counters and kernel-only timings in this
+section are from the earlier CUDA 13.2 CUDA/PyTorch study. There is no new Triton
+Nsight capture in this benchmark follow-up.
 
 Nsight Compute, one launch per report ([how to capture and read](profiling.md)). ncu
 locks clocks and times the kernel alone, so its durations differ from the tables above;
@@ -128,14 +148,43 @@ None of these limits a DRAM-bound launch: all four keep DRAM 94% busy.
 
 ## Small images
 
-At 48 × 64 every backend measures its call cost: 10.8–11.1 µs for `cuda_pixel`, `cuda_vec`
-and `cuda_smem`, 13.1 µs for `cuda_planar` (two launches and an allocation), 15–17 µs for
-`pytorch_matmul`, 19.6 µs for `pytorch_compile` (guard checks before each call), 20.8 µs
-(FP32) to 26.8 µs (FP16) for the eager reference, and 6.0 µs for the copy reference (one
-copy, no Python dispatch). At 1024 × 1024 FP16, `cuda_vec` (11.0 µs) is the only kernel at
-call cost; `cuda_pixel` takes 13.2 µs, `cuda_smem` 15.1 µs.
+Complete-call latency in µs. Small cases are sensitive to Python submission gaps
+and clock/cache state; these are not kernel-only durations.
+
+| 48 × 64 | FP32 | FP16 | BF16 |
+|---|---:|---:|---:|
+| copy reference | 6.240 | 6.240 | 6.080 |
+| `pytorch` | 21.664 | 26.672 | 26.592 |
+| `pytorch_matmul` | 17.072 | 15.264 | 15.072 |
+| `pytorch_compile` | 20.224 | 19.536 | 19.584 |
+| `cuda_pixel` | 11.328 | 10.912 | 10.976 |
+| `cuda_vec` | 11.136 | 10.944 | 10.928 |
+| `cuda_smem` | 11.104 | 10.912 | 11.040 |
+| `cuda_planar` | 13.280 | 13.216 | 13.056 |
+| `triton` | 13.312 | 13.664 | 13.584 |
+
+| 1024 × 1024 | FP32 | FP16 | BF16 |
+|---|---:|---:|---:|
+| copy reference | 10.096 | 6.288 | 6.272 |
+| `pytorch` | 25.264 | 36.544 | 36.576 |
+| `pytorch_matmul` | 43.872 | 39.680 | 39.920 |
+| `pytorch_compile` | 19.840 | 19.744 | 19.488 |
+| `cuda_pixel` | 12.928 | 12.864 | 12.720 |
+| `cuda_vec` | 12.960 | 11.040 | 15.136 |
+| `cuda_smem` | 15.072 | 15.040 | 14.640 |
+| `cuda_planar` | 21.152 | 17.248 | 17.280 |
+| `triton` | 15.264 | 18.128 | 13.664 |
+
+At 1024², Triton's FP16 run medians range **13.744–18.368 µs**; FP32 ranges
+15.184–18.848 µs. This is much less stable than the large cases. Do not interpret
+the small-case ranking as a precise kernel throughput comparison. Every run's
+median and min–max range is retained in the compact summary.
 
 ## Decisions
+
+The profiler-based explanations below refer to the historical capture session.
+The new measurements support retaining `cuda_vec` for cache-resident inputs;
+Triton is competitive at the large DRAM-bound size but slower at 2048² FP16/BF16.
 
 - **`cuda_vec` is the recommended kernel.** At DRAM-bound sizes it ties with the others
   (within 1% of the best in the profiler); with the image in L2 it is the fastest, at 91% of
@@ -159,8 +208,8 @@ call cost; `cuda_pixel` takes 13.2 µs, `cuda_smem` 15.1 µs.
 
 ## Validation
 
-- Test suite on the RTX 5080: **529 passed**; 86 skipped are the Triton backend, not yet
-  implemented ([testing](testing.md)).
+- Original CUDA/PyTorch study on RTX 5080: **529 passed**, 86 skipped before
+  Triton was implemented. Current Triton validation is documented below.
 - Compute Sanitizer: memcheck **0 errors** in 344 CUDA tests (including misaligned images
   that take the fallback); racecheck **0 hazards**, synccheck and initcheck **0 errors** on
   the 172 `cuda_vec` and `cuda_smem` tests.
@@ -170,6 +219,17 @@ call cost; `cuda_pixel` takes 13.2 µs, `cuda_smem` 15.1 µs.
 - One desktop GPU with unlocked clocks; buffers are reused between samples.
 - The benchmark times whole Python calls; kernel-only comparisons come from single ncu
   launches, which run at base clocks.
-- Triton is not implemented yet.
+- The benchmark tables and figure include Triton; historical profiling still
+  covers CUDA/PyTorch only. Small-case run variation is reported above.
 
-[sweep.sh](../benchmarks/sweep.sh) regenerates the raw JSON and the Nsight reports.
+New benchmark JSON is in `artifacts/perf_20261023/rgb_to_grayscale/`. Historical
+Nsight reports remain in `results/rtx5080/`. See [benchmarking](benchmarking.md)
+for reproduction.
+
+## Triton implementation follow-up (2026-10-23)
+
+The explicit Triton backend is now implemented. Combined GPU validation for
+problems 4 and 5: **1,373 passed, no skips**. Triton-only memcheck: **227 passed,
+zero errors**. See [testing](testing.md#triton-validation-2026-10-23) for commands
+and coverage. The same-day performance follow-up now includes three matched
+all-backend runs in the tables and chart above.

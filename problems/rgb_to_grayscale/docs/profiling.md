@@ -24,9 +24,11 @@ ncu --profile-from-start off --set full --section SourceCounters --import-source
 `lab.profile` checks the backend against the reference, warms it up (which also compiles
 `pytorch_compile`) and runs it once in a capture range, so neither input generation nor
 compilation appears. `cuda_planar` produces two kernels per report, the eager reference
-five (FP32). [sweep.sh](../benchmarks/sweep.sh) captures all 23 reports used in
-[results](results.md): every backend at 4096² in FP32 and FP16 (the reference in FP32
-only), plus the CUDA kernels and `pytorch_compile` at 2048² with a warm cache.
+five (FP32). The historical CUDA/PyTorch analysis in [results](results.md) uses
+23 reports: those backends at 4096² in FP32 and FP16 (the reference in FP32 only),
+plus the CUDA kernels and `pytorch_compile` at 2048² with a warm cache.
+[sweep.sh](../benchmarks/sweep.sh) now includes four additional Triton reports
+when run without `BENCH_ONLY=1`; the current Triton follow-up collected benchmarks only.
 
 ncu locks clocks to base and, by default, flushes caches before the launch, and it times
 the kernel alone. Its durations therefore differ from the benchmark's, which time one

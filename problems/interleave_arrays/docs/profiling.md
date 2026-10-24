@@ -18,7 +18,9 @@ ncu --profile-from-start off --set full --section SourceCounters --import-source
 `lab.profile` checks the backend against the reference, warms it up and runs it once in a
 capture range, so input generation never appears. The PyTorch reference produces two
 kernels per report (one per strided assignment). [sweep.sh](../benchmarks/sweep.sh)
-captures all 10 reports used in [results](results.md).
+originally captured the 10 CUDA/PyTorch reports used in the historical analysis
+in [results](results.md). It now also includes two Triton reports when run without
+`BENCH_ONLY=1`; the current Triton follow-up collected benchmarks only.
 
 ## What to check, in order
 

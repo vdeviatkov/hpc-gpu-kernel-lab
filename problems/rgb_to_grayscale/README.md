@@ -5,17 +5,24 @@ per write, 12 bytes per pixel in FP32. A memory-bound kernel for studying whethe
 three-channel stride costs anything, and what wider accesses, shared-memory staging or a
 planar layout buy.
 
-**Status:** 🟨 CUDA and PyTorch complete, Triton not implemented yet · validated and measured
+**Status:** ✅ CUDA, PyTorch and Triton implemented · validated and measured
 on NVIDIA GeForce RTX 5080 · primary lesson: **interleaved channel access** · prerequisite:
 [04 · Interleave Arrays](../interleave_arrays/README.md).
 
-![Effective bandwidth of every backend at 2048 × 2048 and 4096 × 4096 on RTX 5080. At 4096 × 4096 the CUDA kernels and torch.compile reach 809–866 GB/s, below the 960 GB/s DRAM peak; at 2048 × 2048 FP16 cuda_vec reaches 2060 GB/s because the image stays in L2.](figures/rgb_bandwidth.svg)
+![Updated three-run RGB comparison including Triton at 2048² and 4096²: Triton reaches 836 GB/s FP32 and 817 GB/s FP16 at 4096².](figures/rgb_bandwidth.svg)
+
+The figure and benchmark tables include three matched runs of every backend,
+including Triton (2026-10-23 PDT / 2026-10-24 UTC). Earlier Nsight findings are
+labeled separately in [results](docs/results.md).
 
 ## Key results
 
 RTX 5080. 4096 × 4096 (a lab extension) is DRAM-bound; the source's 2048 × 2048 FP16 image
 stays in L2. Details are in [results](docs/results.md).
 
+- **Triton is competitive for large images:** 320.9 µs FP32 and 164.3 µs FP16
+  at 4096². At cache-resident 2048² FP16 it takes 21.4 µs versus 16.3 µs for
+  `cuda_vec`. All are complete-call medians from the same session.
 - **The stride costs nothing at DRAM-bound sizes.** One pixel per thread (`cuda_pixel`),
   16-byte packs (`cuda_vec`) and shared-memory staging (`cuda_smem`) all read exactly the
   image once at 94% DRAM throughput, 262–265 µs per FP32 kernel in the profiler. L1
@@ -57,7 +64,7 @@ from problems.rgb_to_grayscale.api import rgb_to_grayscale
 
 image = torch.tensor([[[255.0, 0.0, 0.0], [100.0, 150.0, 200.0]]], device="cuda")
 # Backends: pytorch, pytorch_matmul, pytorch_compile,
-#           cuda_pixel, cuda_vec, cuda_smem, cuda_planar
+#           cuda_pixel, cuda_vec, cuda_smem, cuda_planar, triton
 rgb_to_grayscale(image, backend="cuda_vec")  # [[76.245, 140.75]]
 ```
 
@@ -70,7 +77,7 @@ rgb_to_grayscale/
 ├── cases.py         image sizes (every pixel count mod 8) and value distributions
 ├── pytorch/         reference (the formula, eager), matmul and torch.compile baselines
 ├── cuda/            pixel, vec, smem and planar kernels, bindings, loader
-├── triton/          stub: not implemented yet
+├── triton/          fused pixel kernel with FP32 arithmetic
 ├── tests/           source examples, channel order, misalignment, every backend vs the reference
 ├── benchmarks/      sweep.sh (benchmarks + Nsight reports), plot.py
 ├── figures/         generated chart (tracked)

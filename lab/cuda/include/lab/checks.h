@@ -15,6 +15,12 @@ inline void check_cuda_vector(const at::Tensor &t, const char *name) {
               ": expected a contiguous 1-D CUDA tensor");
 }
 
+// A contiguous, strided, 2-D CUDA tensor: a row-major matrix.
+inline void check_cuda_matrix(const at::Tensor &t, const char *name) {
+  TORCH_CHECK(t.is_cuda() && t.layout() == c10::kStrided && t.dim() == 2 && t.is_contiguous(), name,
+              ": expected a contiguous 2-D CUDA tensor");
+}
+
 // Same shape, dtype and device as `reference`.
 inline void check_same(const at::Tensor &t, const at::Tensor &reference, const char *name) {
   TORCH_CHECK(t.sizes() == reference.sizes() && t.scalar_type() == reference.scalar_type() &&

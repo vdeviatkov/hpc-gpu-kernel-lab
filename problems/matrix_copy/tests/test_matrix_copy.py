@@ -142,6 +142,98 @@ def test_matches_reference(backend, case, dtype):
     check_against_reference(api, cases, backend, case, dtype)
 
 
+CUDA_VARIANTS = {
+    name: options["variant"] for name, (module, options) in api.VARIANTS.items() if module == "cuda"
+}
+
+
+def cuda_extension():
+    skip_if_unavailable("cuda")
+    from problems.matrix_copy.cuda.implementation import extension
+
+    return extension()
+
+
+@pytest.mark.parametrize("threads", [128, 512])
+@pytest.mark.parametrize("shape", [(65, 129), (1025, 1025)], ids=str)
+@pytest.mark.parametrize("backend", CUDA_VARIANTS)
+def test_cuda_block_sizes(backend, shape, threads):
+    """The 2-D block is (32, threads / 32) and the pack grids scale with threads."""
+    a = Sampler(torch.float32, device()).randn(*shape)
+    skip_if_unavailable(backend, api)
+    assert_same_bits(api.matrix_copy(a, backend=backend, threads=threads), a)
+
+
+@pytest.mark.parametrize("offsets", [(1, 0), (0, 1), (1, 1)], ids=["input", "output", "both"])
+@pytest.mark.parametrize("dtype", api.DTYPES)
+@pytest.mark.parametrize("backend", CUDA_VARIANTS)
+def test_binding_misaligned_buffers(backend, dtype, offsets):
+    """The api always allocates an aligned output, so a misaligned output can only reach a
+    kernel through a direct call. Elements outside the output view must stay untouched."""
+    dtype = api.DTYPES[dtype]
+    skip_unsupported_dtype(dtype)
+    ext = cuda_extension()
+    m, n = 33, 67
+    a_offset, out_offset = offsets
+    a = Sampler(dtype, "cuda").randn(1 + m * n)[a_offset : a_offset + m * n].view(m, n)
+    out_buffer = torch.full((1 + m * n,), -7.0, dtype=dtype, device="cuda")
+    out = out_buffer[out_offset : out_offset + m * n].view(m, n)
+    assert (a.data_ptr() % 16 != 0) == bool(a_offset)
+    assert (out.data_ptr() % 16 != 0) == bool(out_offset)
+    ext.matrix_copy(a, out, CUDA_VARIANTS[backend], 256)
+    assert_same_bits(out, a)
+    guard = out_buffer[0] if out_offset else out_buffer[-1]
+    assert guard.item() == -7.0
+
+
+def test_binding_rejects_invalid_arguments():
+    ext = cuda_extension()
+    a = torch.zeros(4, 8, device="cuda")
+    out = torch.empty_like(a)
+    shared = torch.zeros(40, device="cuda")
+    bad_calls = [
+        (a, out, -1, 256),  # variant
+        (a, out, 8, 256),
+        (a, out, 0, 64),  # block size
+        (a, out, 0, 1024),
+        (a.flatten(), out.flatten(), 0, 256),  # 1-D
+        (a.t(), torch.empty(8, 4, device="cuda"), 0, 256),  # non-contiguous input
+        (a, torch.empty(8, 4, device="cuda"), 0, 256),  # shape mismatch
+        (a, out.half(), 0, 256),  # dtype mismatch
+        (a.double(), out.double(), 0, 256),  # fp64
+        (a.cpu(), out.cpu(), 0, 256),  # host tensors
+        (a, a, 0, 256),  # output is the input
+        (shared[:32].view(4, 8), shared[8:].view(4, 8), 0, 256),  # partial overlap
+    ]
+    for args in bad_calls:
+        with pytest.raises(RuntimeError):
+            ext.matrix_copy(*args)
+
+
+@pytest.mark.parametrize("tile", [(16, 128), (128, 16), (32, 32), (1, 1024)], ids=str)
+def test_triton_tile_shapes(tile):
+    skip_if_unavailable("triton")
+    a = Sampler(torch.float16, device()).randn(65, 129)
+    block_m, block_n = tile
+    out = api.matrix_copy(a, backend="triton_2d", block_m=block_m, block_n=block_n)
+    assert_same_bits(out, a)
+
+
+def test_triton_rejects_invalid_options():
+    skip_if_unavailable("triton")
+    a = torch.zeros(4, 8, device="cuda")
+    bad_options = [
+        {"layout": "3d"},
+        {"block_size": 1000},
+        {"block_m": 0},
+        {"block_n": 48},
+        {"num_warps": 3},
+    ]
+    for options in bad_options:
+        with pytest.raises(ValueError):
+            api.matrix_copy(a, backend="triton", **options)
+
+
 def test_rejects_invalid_inputs():
     a = torch.arange(12, dtype=torch.float32).reshape(3, 4)
     bad_tensors = [

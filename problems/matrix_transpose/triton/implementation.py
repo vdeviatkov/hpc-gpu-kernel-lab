@@ -8,9 +8,6 @@ import torch
 import triton
 import triton.language as tl
 
-IMPLEMENTED = False
-
-
 @triton.jit
 def transpose_kernel(a_ptr, out_ptr, m, n, BLOCK: tl.constexpr):
     pass  # TODO: implement.

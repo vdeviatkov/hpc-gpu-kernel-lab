@@ -21,7 +21,22 @@ import torch
 from lab import dispatch
 
 FUNCTION = "matrix_copy"
-BACKENDS = ("pytorch", "cuda", "triton")
+VARIANTS = {
+    # Thread mapping: a warp along a row (coalesced) or down a column (uncoalesced).
+    "cuda_2d": ("cuda", {"variant": 0}),
+    "cuda_2d_colmajor": ("cuda", {"variant": 1}),
+    # One thread per element over the flattened matrix, the source starter's geometry.
+    "cuda_flat": ("cuda", {"variant": 2}),
+    # 16-byte packs: one per thread, 2 or 4 in flight, a one-wave grid-stride loop, and
+    # evict-first cache hints. Misaligned buffers fall back to cuda_flat.
+    "cuda_vec": ("cuda", {"variant": 3}),
+    "cuda_vec_ilp2": ("cuda", {"variant": 4}),
+    "cuda_vec_ilp4": ("cuda", {"variant": 5}),
+    "cuda_vec_gridstride": ("cuda", {"variant": 6}),
+    "cuda_stream": ("cuda", {"variant": 7}),
+    "triton_2d": ("triton", {"layout": "2d"}),
+}
+BACKENDS = ("pytorch", *VARIANTS, "cuda", "triton")
 DTYPES = {
     "fp32": torch.float32,
     "fp16": torch.float16,

@@ -1,104 +1,76 @@
 # 07 · Matrix Copy
 
-## Source
+Copy an N × N matrix, bit for bit. No arithmetic, so the copy measures the memory system
+itself: how close a kernel gets to the driver's memcpy, where the L2 cache stops helping,
+and what coalescing, vector width, ILP and cache hints are worth. It is the control
+experiment for [08 · Matrix Transpose](../matrix_transpose/README.md).
 
-LeetGPU: [Matrix Copy](https://leetgpu.com/challenges/matrix-copy)
+**Status:** PyTorch, CUDA (8 variants) and Triton (2 layouts) implemented, validated and
+measured on RTX 5080. 1436 GPU correctness tests passed; Compute Sanitizer memcheck: 1076
+passed, zero errors. Source: [LeetGPU Matrix Copy](https://leetgpu.com/challenges/matrix-copy)
+(N × N float32, 1 ≤ N ≤ 4096; performance case N = 4096).
 
-Catalog title and difficulty verified on 2026-09-12; contract verified on
-2026-10-23 against the LeetGPU challenge source (`challenges/easy/31_matrix_copy`).
+![Effective bandwidth against logical traffic per call: past the L2 boundary every coalesced kernel reaches about 800 GB/s, just under memcpy; the column-major kernel stays near 470 (FP32) or 130 GB/s (FP16).](figures/bandwidth_vs_size.svg)
 
-**Source contract:** copy an N x N row-major float32 matrix, `B[i][j] = A[i][j]`,
-1 ≤ N ≤ 4096; performance is measured at N = 4096. The source checker allows
-1e-5 tolerance; here every backend must match bit for bit, NaN payloads and
-signed zeros included.
+## Key results
 
-**Lab extensions** (labeled separately): rectangular M x N, empty matrices,
-N > 4096, and fp16/bf16 elements. The API returns a new tensor rather than
-writing into a caller's `B`, and accepts contiguous inputs only.
+- **Coalesced kernels match memcpy when DRAM-bound.** memcpy reaches 819–828 GB/s (85–86%
+  of the nominal 960 GB/s). At 8192² FP32 every coalesced kernel is within 2.5% of it; at
+  the source's 4096² FP32, `cuda_flat` is at 98.6% (164.5 vs 162.2 µs).
+- **The L2 cliff follows the resident footprint, not the traffic.** The benchmark keeps two
+  output blocks alive (3·N²·e), so FP32 drops between 2304² and 2560². With one reused
+  output (2·N²·e) it drops between 2896² and 3072²: FP32 2560² runs 2.8× faster that way,
+  FP16 4096² 3.3×. Below the cliff, memcpy reaches 2.75 TB/s.
+- **Uncoalesced costs L2 transactions, not DRAM bytes.** The column-major kernel touches 32
+  sectors per request but reads only 15% more DRAM than the minimum. It is L2-bound:
+  2.0× slower than memcpy in FP32, 5.7× in FP16, up to 19× when the data is in L2.
+- **Vectorization matters for 2-byte elements and in L2, ILP does not.** DRAM-bound FP32
+  gains nothing from 16-byte packs. FP16 kernel time halves (75.7 → 39.3 µs, 60% → 94.5%
+  DRAM busy). More packs per thread or a grid-stride loop only add LG-throttle stalls and
+  run 0.2–2.3% slower.
+- **Streaming hints only hurt.** `__ldcs`/`__stcs` throw away reuse between calls (2.3×
+  slower at 2304² FP32) and gain nothing above L2.
+- **Triton matches CUDA when DRAM-bound** (within 1.3–2.6%) and vectorizes to 16-byte
+  accesses on its own; its call costs about 4 µs more.
 
-## Prerequisites
+`cuda_vec` is the recommended kernel: within 3% of memcpy DRAM-bound in every dtype and the
+fastest kernel in L2.
 
-[01 · Vector Addition](../vector_add/README.md)
+## Documentation
 
-## Difficulty
+| Page | Contents |
+|---|---|
+| [Design](docs/design.md) | Contract, variants and hypotheses, bit-level copying, traffic and footprint |
+| [Results](docs/results.md) | Three-run tables, the L2 cliff, Nsight evidence, SASS, answers and limitations |
+| [Testing](docs/testing.md) | Bit-exact suite, misalignment, binding checks, sanitizer |
+| [Benchmarking](docs/benchmarking.md) | Reproduce the sweep and what one sample measures |
+| [Profiling](docs/profiling.md) | Nsight captures, metric definitions and the warm-capture caveat |
 
-- LeetGPU: **Easy**.
+## Quick start
 
-## Why this problem matters
-
-A copy is a control experiment for transpose and stencil studies; its bandwidth is a measured local comparison, not a claimed universal hardware peak.
-
-## Primary lesson
-
-**Memory bandwidth ceiling**
-
-## Primary concepts
-
-- Memory coalescing
-- Vectorized access
-- Cache behavior
-
-## Planned implementations
-
-- [x] PyTorch correctness reference and meaningful baseline (`clone`, a device-to-device memcpy)
-- [ ] CUDA straightforward baseline
-- [ ] CUDA named optimization variants
-- [ ] Triton implementation with explicit tile/warp choices
-
-CUDA and Triton provide useful low-level contrasts against PyTorch. JAX is deferred until it would answer a distinct compiler or performance question rather than duplicate coverage.
-
-CUDA and Triton are still stubs that raise `NotImplementedError`; their tests skip.
-Run the tests with `python -m pytest problems/matrix_copy` and benchmark with
-`python -m lab.bench matrix_copy`.
-
-```text
-matrix_copy/
-    README.md  study plan and status
-    api.py     public entry point and draft contract
-    cases.py   test and benchmark inputs, bytes and FLOPs
-    pytorch/   reference: clone (cudaMemcpyAsync on the GPU)
-    cuda/      kernels.cu, bindings.cpp, implementation.py (stubs)
-    triton/    Triton kernel (stub)
-    tests/     test_matrix_copy.py
+```bash
+python -m pytest -q problems/matrix_copy
+PYTHON=python bash problems/matrix_copy/benchmarks/sweep.sh
 ```
 
-## Optimization roadmap
+```python
+import torch
+from problems.matrix_copy.api import matrix_copy
 
-These are candidate experiments, not promised improvements or completed code.
+a = torch.randn(4096, 4096, device="cuda")
+b = matrix_copy(a, backend="cuda_vec")  # a new tensor, bit-identical to a
+```
 
-1. Contiguous scalar copy.
-2. Aligned vector copy with fallback.
-3. Compare flattened and two-dimensional launch geometry.
-4. Separate cache-resident and streaming working sets.
+Backends: `pytorch` (`clone`, a memcpy), `cuda_2d`, `cuda_2d_colmajor`, `cuda_flat` (the
+`cuda` alias), `cuda_vec`, `cuda_vec_ilp2`, `cuda_vec_ilp4`, `cuda_vec_gridstride`,
+`cuda_stream`, `triton` (flat) and `triton_2d` (64 × 64 tiles). CUDA takes `threads` =
+128/256/512; Triton takes `block_size`, `block_m`, `block_n` and `num_warps`. FP32, FP16
+and BF16; rectangular and empty matrices are lab extensions.
 
-## Correctness focus
+Raw benchmark JSON, 40 Nsight reports, CSV exports, steady-state timings and disassembly
+are in `artifacts/matrix_copy/`, in this workspace and on cuda.0. Large generated files are
+ignored by git; [compact evidence](benchmarks/measured_summary.json), the scripts and the
+figure are tracked.
 
-Square source contract; rectangular, offset, and pitched cases only as labeled lab variants.
-
-## Things to measure
-
-- Latency percentiles
-- Effective GB/s
-- DRAM bytes
-- L2 hit behavior
-
-Separate source conformance from broader shape/dtype experiments. Use the
-[benchmarking plan](../../docs/benchmarking.md) and choose
-[profiler metrics](../../docs/profiling.md) for a specific hypothesis.
-
-## Questions to answer
-
-- Is the working set larger than the measured GPU L2?
-- How much of transpose overhead is additional to a copy?
-
-## Status
-
-🟨 **In Progress**
-
-Contract, cases, PyTorch reference and tests are done. The tests cover the source
-examples and functional inputs, special bit patterns, fresh output, misaligned
-input, tails and empty matrices. CUDA and Triton are not implemented.
-Results pending hardware benchmark.
-
-Follow the [optimization methodology](../../docs/methodology.md). When work
-begins, add evidence and update the [roadmap status](../../README.md#roadmap).
+Prerequisites: [Vector Addition](../vector_add/README.md). Follow the
+[optimization methodology](../../docs/methodology.md).

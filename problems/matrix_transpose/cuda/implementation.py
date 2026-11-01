@@ -1,7 +1,4 @@
-"""CUDA backend for 08 · Matrix Transpose: tiled transpose with 16-byte packs.
-
-The extension builds lazily on the first call and launches on PyTorch's current stream.
-"""
+"""CUDA transpose variants, built lazily and launched on the current PyTorch stream."""
 
 from pathlib import Path
 
@@ -9,12 +6,12 @@ import torch
 
 from lab.cuda_ext import load_extension
 
-IMPLEMENTED = True
+
+def extension():
+    return load_extension("gpu_lab_matrix_transpose", Path(__file__).parent)
 
 
-def transpose(a):
-    if not IMPLEMENTED:
-        raise NotImplementedError("transpose: CUDA backend not implemented (cuda/kernels.cu)")
+def transpose(a, *, variant=3):
     out = torch.empty((a.shape[1], a.shape[0]), dtype=a.dtype, device=a.device)
-    load_extension("gpu_lab_matrix_transpose", Path(__file__).parent).transpose(a, out)
+    extension().transpose(a, out, variant)
     return out

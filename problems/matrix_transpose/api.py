@@ -17,7 +17,20 @@ import torch
 from lab import dispatch
 
 FUNCTION = "transpose"
-BACKENDS = ("pytorch", "cuda", "triton")
+VARIANTS = {
+    # One thread per element: coalesced loads and strided stores, or the reverse.
+    "cuda_naive_row": ("cuda", {"variant": 0}),
+    "cuda_naive_col": ("cuda", {"variant": 1}),
+    # A 32x32 shared tile so both sides coalesce: plain (bank conflicts on column reads),
+    # padded to 32x33, or XOR-swizzled with no extra shared memory.
+    "cuda_smem": ("cuda", {"variant": 2}),
+    "cuda_smem_pad": ("cuda", {"variant": 3}),
+    "cuda_smem_swizzle": ("cuda", {"variant": 4}),
+    # A swizzled 16x256 tile moved with 16-byte packs, several per thread. Edge tiles and
+    # inputs whose rows are not 16-byte aligned use scalar accesses.
+    "cuda_vec_ilp": ("cuda", {"variant": 5}),
+}
+BACKENDS = ("pytorch", *VARIANTS, "cuda", "triton")
 DTYPES = {
     "fp32": torch.float32,
     "fp16": torch.float16,

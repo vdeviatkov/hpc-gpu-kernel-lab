@@ -4,9 +4,10 @@
 
 #include "lab/checks.h"
 
-void launch_transpose(const at::Tensor &a, at::Tensor out);
+void launch_transpose(const at::Tensor &a, at::Tensor out, int64_t variant);
 
-void transpose(const at::Tensor &a, at::Tensor out) {
+void transpose(const at::Tensor &a, at::Tensor out, int64_t variant) {
+  TORCH_CHECK(variant >= 0 && variant <= 5, "transpose: invalid variant");
   for (const auto &t : {a, out}) {
     lab::check_cuda_matrix(t, "transpose");
     lab::check_plain(t, "transpose");
@@ -16,10 +17,10 @@ void transpose(const at::Tensor &a, at::Tensor out) {
                   out.scalar_type() == a.scalar_type() && out.device() == a.device(),
               "transpose: out must be the reversed shape with the same dtype and device");
   lab::check_no_overlap(out, a, "transpose");
-  launch_transpose(a, out);
+  launch_transpose(a, out, variant);
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("transpose", &transpose, "08 · Matrix Transpose", pybind11::arg("a"),
-        pybind11::arg("out"));
+  m.def("transpose", &transpose, "08 · Matrix Transpose", pybind11::arg("a"), pybind11::arg("out"),
+        pybind11::arg("variant") = 3);
 }

@@ -36,14 +36,16 @@ Transpose is a flagship because one small operation exposes load/store coalescin
 ## Planned implementations
 
 - [x] PyTorch correctness reference and materialized eager baseline
-- [ ] CUDA straightforward baseline
-- [ ] CUDA named optimization variants
+- [x] CUDA straightforward baselines: `cuda_naive_row`, `cuda_naive_col` (written, not yet run on a GPU)
+- [x] CUDA named optimization variants: `cuda_smem`, `cuda_smem_pad`, `cuda_smem_swizzle`,
+  `cuda_vec_ilp` (written, not yet run on a GPU)
 - [ ] Triton implementation with explicit tile/warp choices
 
 CUDA and Triton provide useful low-level contrasts against PyTorch. JAX is deferred until it would answer a distinct compiler or performance question rather than duplicate coverage.
 
 Steps 0–3 complete: source verification, algorithm contract, tested correctness
-reference, and a simple performance model. CUDA and Triton remain stubs.
+reference, and a simple performance model. Step 4 is written: six CUDA variants, pending
+GPU validation. Triton remains a stub.
 Run the tests with `python -m pytest problems/matrix_transpose` and benchmark with
 `python -m lab.bench matrix_transpose`.
 
@@ -53,7 +55,7 @@ matrix_transpose/
     api.py         validated public contract
     cases.py       test and benchmark inputs, bytes and FLOPs
     pytorch/       materialized transpose reference
-    cuda/          kernels.cu, bindings.cpp, implementation.py (stubs)
+    cuda/          kernels.cu, bindings.cpp, implementation.py (six variants)
     triton/        Triton kernel (stub)
     tests/         test_matrix_transpose.py
 ```
@@ -92,8 +94,8 @@ Separate source conformance from broader shape/dtype experiments. Use the
 
 🟨 **In Progress**
 
-CPU reference validation: 47 passed; 78 GPU cases skipped (NVIDIA GPU unavailable).
-GPU implementation begins at methodology step 4.
+CPU reference validation: 50 passed; 391 GPU cases skipped (NVIDIA GPU unavailable).
+CUDA variants are written but not yet compiled or run on a GPU.
 Results pending hardware benchmark.
 
 Follow the [optimization methodology](../../docs/methodology.md). When work

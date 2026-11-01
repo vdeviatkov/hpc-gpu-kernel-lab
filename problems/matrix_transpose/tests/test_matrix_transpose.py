@@ -3,7 +3,12 @@
 import pytest
 
 from lab.data import Sampler
-from lab.testing import case_id, check_against_reference
+from lab.testing import (
+    case_id,
+    check_against_reference,
+    skip_if_unavailable,
+    skip_unsupported_dtype,
+)
 from problems.matrix_transpose import api, cases
 
 
@@ -89,3 +94,66 @@ def test_traffic_model():
     assert cases.logical_bytes(c, torch.float32) == 336_000_000
     assert cases.logical_bytes(c, torch.float16) == 168_000_000
     assert cases.flops(c) is None
+
+
+CUDA_VARIANTS = {
+    name: options["variant"] for name, (module, options) in api.VARIANTS.items() if module == "cuda"
+}
+
+
+def cuda_extension():
+    skip_if_unavailable("cuda")
+    from problems.matrix_transpose.cuda.implementation import extension
+
+    return extension()
+
+
+@pytest.mark.parametrize("offsets", [(1, 0), (0, 1), (1, 1)], ids=["input", "output", "both"])
+@pytest.mark.parametrize("dtype", api.DTYPES)
+@pytest.mark.parametrize("backend", CUDA_VARIANTS)
+def test_binding_misaligned_buffers(backend, dtype, offsets):
+    """Rows that are not 16-byte aligned must take cuda_vec_ilp's scalar path. The api
+    always allocates an aligned output, so a misaligned output needs a direct call.
+    Elements outside the output view must stay untouched."""
+    import torch
+
+    dtype = api.DTYPES[dtype]
+    skip_unsupported_dtype(dtype)
+    ext = cuda_extension()
+    m, n = 40, 520
+    a_offset, out_offset = offsets
+    a = Sampler(dtype, "cuda").randn(1 + m * n)[a_offset : a_offset + m * n].view(m, n)
+    out_buffer = torch.full((1 + m * n,), -7.0, dtype=dtype, device="cuda")
+    out = out_buffer[out_offset : out_offset + m * n].view(n, m)
+    assert (a.data_ptr() % 16 != 0) == bool(a_offset)
+    assert (out.data_ptr() % 16 != 0) == bool(out_offset)
+    ext.transpose(a, out, CUDA_VARIANTS[backend])
+    assert torch.equal(
+        out.view(torch.int16 if dtype != torch.float32 else torch.int32),
+        a.t().view(torch.int16 if dtype != torch.float32 else torch.int32),
+    )
+    guard = out_buffer[0] if out_offset else out_buffer[-1]
+    assert guard.item() == -7.0
+
+
+def test_binding_rejects_invalid_arguments():
+    import torch
+
+    ext = cuda_extension()
+    a = torch.zeros(4, 8, device="cuda")
+    out = torch.empty(8, 4, device="cuda")
+    shared = torch.zeros(40, device="cuda")
+    bad_calls = [
+        (a, out, -1),  # variant
+        (a, out, 6),
+        (a.flatten(), out.flatten(), 3),  # 1-D
+        (a.t(), torch.empty(4, 8, device="cuda"), 3),  # non-contiguous input
+        (a, torch.empty(4, 8, device="cuda"), 3),  # shape not reversed
+        (a, out.half(), 3),  # dtype mismatch
+        (a.double(), out.double(), 3),  # fp64
+        (a.cpu(), out.cpu(), 3),  # host tensors
+        (shared[:32].view(4, 8), shared[8:].view(8, 4), 3),  # partial overlap
+    ]
+    for args in bad_calls:
+        with pytest.raises(RuntimeError):
+            ext.transpose(*args)

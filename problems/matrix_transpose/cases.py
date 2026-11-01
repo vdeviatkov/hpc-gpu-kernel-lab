@@ -18,6 +18,7 @@ TEST_CASES = [
         (32, 33),
         (65, 129),
         (129, 65),
+        (40, 520),  # full 16x256 vec_ilp tiles plus tails, pack-aligned for FP32 and FP16
         (0, 0),
         (0, 5),
         (5, 0),

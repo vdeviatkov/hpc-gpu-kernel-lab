@@ -1,9 +1,13 @@
 """08 · Matrix Transpose: public entry point.
 
-Draft contract, to confirm against the source statement linked in README.md before
-implementing:
+Source contract verified 2026-10-24 at the LeetGPU link in README.md:
+row-major fp32 input (rows, cols), row-major output (cols, rows),
+out[j, i] = a[i, j]; 1 <= rows, cols <= 8192. Performance case: (7000, 6000).
 
-out[j, i] = a[i, j] for a contiguous (M, N) matrix; out is contiguous (N, M).
+The lab returns a fresh contiguous tensor on the input device, without mutation.
+Lab extensions: fp16/bf16, empty dimensions, and dimensions above 8192.
+Only contiguous strided 2-D input is accepted; storage offsets are allowed.
+Transpose performs no arithmetic; all element bits must be preserved.
 """
 
 import sys
@@ -29,6 +33,10 @@ TOLERANCES = {
 
 def transpose(a, *, backend="pytorch", **options):
     """See the module docstring. `options` are backend launch parameters."""
-    # TODO: validate shapes, dtypes, devices and layout per the contract
-    # (see problems/vector_add/api.py for a complete example).
+    if not isinstance(a, torch.Tensor):
+        raise TypeError("expected torch.Tensor")
+    if a.layout != torch.strided or a.ndim != 2 or not a.is_contiguous():
+        raise ValueError("expected a contiguous two-dimensional tensor")
+    if a.dtype not in DTYPES.values():
+        raise ValueError("supported dtypes: fp32, fp16, bf16")
     return dispatch.call(sys.modules[__name__], FUNCTION, backend, a, **options)

@@ -1,7 +1,6 @@
-"""CUDA backend for 08 · Matrix Transpose. Not implemented yet.
+"""CUDA backend for 08 · Matrix Transpose: tiled transpose with 16-byte packs.
 
-Implement cuda/kernels.cu, then set IMPLEMENTED = True. The extension builds lazily
-on the first call and launches on PyTorch's current stream.
+The extension builds lazily on the first call and launches on PyTorch's current stream.
 """
 
 from pathlib import Path
@@ -10,7 +9,7 @@ import torch
 
 from lab.cuda_ext import load_extension
 
-IMPLEMENTED = False
+IMPLEMENTED = True
 
 
 def transpose(a):

@@ -5,8 +5,28 @@ Shared by the tests and by `python -m lab.bench`.
 
 from lab.data import element_size
 
-TEST_CASES = [{"m": 1, "n": 1}, {"m": 3, "n": 5}, {"m": 65, "n": 129}]
-BENCH_CASES = [{"m": 1024, "n": 1024}, {"m": 8192, "n": 8192}]
+# Source-valid cases plus empty/oversized lab extensions.
+TEST_CASES = [
+    {"m": m, "n": n}
+    for m, n in [
+        (1, 1),
+        (2, 3),
+        (3, 1),
+        (1, 33),
+        (3, 5),
+        (31, 32),
+        (32, 33),
+        (65, 129),
+        (129, 65),
+        (0, 0),
+        (0, 5),
+        (5, 0),
+        (8193, 1),
+    ]
+]
+BENCH_CASES = [
+    {"m": m, "n": n} for m, n in [(32, 32), (65, 129), (1024, 1024), (7000, 6000), (8192, 8192)]
+]
 
 
 def make_inputs(c, s):

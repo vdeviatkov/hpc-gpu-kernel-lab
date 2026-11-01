@@ -4,12 +4,11 @@
 
 LeetGPU: [Matrix Transpose](https://leetgpu.com/challenges/matrix-transpose)
 
-Catalog title and difficulty verified on 2026-09-12.
+Source contract verified on 2026-10-24; see [design and performance model](docs/design.md).
 
 This is an original study plan, not a reproduction of the source statement.
-For LeetGPU work, confirm the current signature, layout, dtype, and boundary
-contract on the linked page before writing a reference. Any broader lab variant
-must be labeled separately.
+Source: row-major fp32, rows and cols from 1 to 8192; performance case 7000×6000.
+The lab also supports fp16/bf16, empty matrices and larger dimensions.
 
 ## Prerequisites
 
@@ -36,23 +35,24 @@ Transpose is a flagship because one small operation exposes load/store coalescin
 
 ## Planned implementations
 
-- [ ] PyTorch correctness reference and meaningful baseline
+- [x] PyTorch correctness reference and materialized eager baseline
 - [ ] CUDA straightforward baseline
 - [ ] CUDA named optimization variants
 - [ ] Triton implementation with explicit tile/warp choices
 
 CUDA and Triton provide useful low-level contrasts against PyTorch. JAX is deferred until it would answer a distinct compiler or performance question rather than duplicate coverage.
 
-Scaffold: every stub raises `NotImplementedError` until it is implemented.
+Steps 0–3 complete: source verification, algorithm contract, tested correctness
+reference, and a simple performance model. CUDA and Triton remain stubs.
 Run the tests with `python -m pytest problems/matrix_transpose` and benchmark with
 `python -m lab.bench matrix_transpose`.
 
 ```text
 matrix_transpose/
     README.md      study plan and status
-    api.py         public entry point and draft contract
+    api.py         validated public contract
     cases.py       test and benchmark inputs, bytes and FLOPs
-    pytorch/       reference (stub)
+    pytorch/       materialized transpose reference
     cuda/          kernels.cu, bindings.cpp, implementation.py (stubs)
     triton/        Triton kernel (stub)
     tests/         test_matrix_transpose.py
@@ -90,9 +90,10 @@ Separate source conformance from broader shape/dtype experiments. Use the
 
 ## Status
 
-⬜ **Planned**
+🟨 **In Progress**
 
-No accepted implementation or measured results for this curriculum entry.
+CPU reference validation: 47 passed; 78 GPU cases skipped (NVIDIA GPU unavailable).
+GPU implementation begins at methodology step 4.
 Results pending hardware benchmark.
 
 Follow the [optimization methodology](../../docs/methodology.md). When work

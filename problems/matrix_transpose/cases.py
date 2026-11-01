@@ -25,9 +25,16 @@ TEST_CASES = [
         (8193, 1),
     ]
 ]
-BENCH_CASES = [
-    {"m": m, "n": n} for m, n in [(32, 32), (65, 129), (1024, 1024), (7000, 6000), (8192, 8192)]
-]
+# A size sweep across the RTX 5080's 64 MiB (67.1 MB) L2, the same square sizes as
+# 07 · Matrix Copy so the two can be compared shape for shape, plus the source's 7000 x 6000.
+# Each call reads the input and writes an output, 2·M·N·e bytes of logical traffic; lab.bench
+# keeps the previous output alive while the next is allocated, so the footprint between calls
+# is 3·M·N·e. FP32 reaches 64 MiB at N ≈ 2365 (3·N²·e) to 2896 (2·N²·e); FP16/BF16 at
+# N ≈ 3344 to 4096.
+BENCH_SIZES = [512, 1024, 1536, 2048, 2304, 2560, 2896, 3072, 3584, 4096, 5792, 8192]
+SOURCE_CASE = {"m": 7000, "n": 6000}
+BENCH_CASES = [{"m": n, "n": n} for n in BENCH_SIZES[:-1]] + [SOURCE_CASE]
+BENCH_CASES += [{"m": 8192, "n": 8192}]
 
 
 def make_inputs(c, s):

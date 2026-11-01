@@ -1,4 +1,5 @@
-[Overview](../README.md) · Design
+[← Matrix Transpose](../README.md) · **Design** · [Results](results.md) ·
+[Benchmarking](benchmarking.md) · [Profiling](profiling.md)
 
 # Matrix Transpose: steps 0–3
 
@@ -66,4 +67,4 @@ bank behavior needs separate analysis.
 Compare measured transpose against problem 7's copy on identical shape, dtype,
 cache state and timing scope. Logical bytes are not measured DRAM traffic;
 cache residency and scattered transactions can change the relevant bandwidth.
-Results pending hardware benchmark.
+Measured on an RTX 5080: the bank-conflict hypotheses hold exactly; see [results](results.md).

@@ -19,16 +19,18 @@ python -m problems.matrix_transpose.benchmarks.plot artifacts/matrix_transpose
 [sweep.sh](../benchmarks/sweep.sh) runs, in order:
 
 1. The full correctness suite (`tests.log`), then Compute Sanitizer memcheck, racecheck,
-   synccheck and initcheck over the CUDA tests (`sanitizer_*.log`). A failure stops the sweep.
-2. **Three complete runs** of `lab.bench` over `pytorch` and the six CUDA kernels with
+   synccheck and initcheck over the CUDA and Triton tests (`sanitizer_*.log`; see
+   [testing](testing.md)). A failure stops the sweep.
+2. **Three complete runs** of `lab.bench` over `pytorch`, the six CUDA kernels and `triton` with
    `--copy-reference` (`device_{1,2,3}.json`), each followed by
    [copy_control.py](../benchmarks/copy_control.py): 07 · Matrix Copy's `cuda_vec` and
    memcpy on the same cases (`copy_{1,2,3}.json`), the plain-copy ceilings.
-3. 28 Nsight Compute reports with selected metrics and 12 full-set reports
+3. 32 Nsight Compute reports with selected metrics and 14 full-set reports
    (see [profiling](profiling.md)), with raw CSV exports.
 4. An Nsight Systems timeline of every kernel and both copy controls
-   ([timeline.py](../benchmarks/timeline.py)).
-5. Static SASS and resource usage of the extension (`sass/`).
+   ([timeline.py](../benchmarks/timeline.py)), with its kernel and NVTX summaries.
+5. Static SASS and resource usage of the CUDA extension (`sass/`). Triton's SASS is in its
+   full Nsight Compute reports (Source page).
 6. [summarize.py](../benchmarks/summarize.py), which writes the tracked
    [measured_summary.json](../benchmarks/measured_summary.json) and prints the tables in
    [results](results.md). `SKIP_BENCH=1` reuses existing benchmark JSON and only re-profiles.
@@ -38,8 +40,9 @@ python -m problems.matrix_transpose.benchmarks.plot artifacts/matrix_transpose
 - Each backend is checked against the PyTorch reference before it is timed. Backend order
   is shuffled per case with a fixed seed.
 - 25 warmups, then 100 samples. One sample is one Python call between two CUDA events:
-  argument checks, output allocation, launch and kernel. The fixed part is about 10 µs, so
-  at small sizes the samples measure the call, not the kernel. Kernel-only durations come
+  argument checks, output allocation, launch and kernel. The fixed part is about 10 µs
+  (CUDA extension) or 15 µs (Triton), so at small sizes the samples measure the call, not
+  the kernel. Kernel-only durations come
   from [profiling](profiling.md).
 - `effective_gb_s` is `2·M·N·e` bytes over the median latency. Above 960 GB/s means L2
   served part of the traffic.

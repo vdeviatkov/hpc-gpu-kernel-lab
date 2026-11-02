@@ -79,7 +79,7 @@ done
 nsys profile --trace=cuda,nvtx --capture-range=cudaProfilerApi --capture-range-end=stop \
   --force-overwrite true -o "$out/nsys/timeline" \
   "$python" -m problems.matrix_transpose.benchmarks.timeline > "$out/nsys/timeline.log" 2>&1
-nsys stats --report cuda_gpu_kern_sum,nvtx_sum --format csv --force-export true \
+nsys stats --report cuda_gpu_kern_sum,nvtx_sum --format csv --force-export true --force-overwrite \
   --output "$out/nsys/timeline" "$out/nsys/timeline.nsys-rep" >> "$out/nsys/timeline.log" 2>&1
 
 # Static SASS and resource usage of the built extension.

@@ -1,6 +1,6 @@
 # Profiling
 
-[← Matrix Transpose](../README.md) · [Design](design.md) · [Results](results.md) ·
+[← Matrix Transpose](../README.md) · [Design](design.md) · [Results](results.md) · [Testing](testing.md) ·
 [Benchmarking](benchmarking.md) · **Profiling**
 
 Lab-wide workflow and `lab.profile`: [profiling](../../../docs/profiling.md).

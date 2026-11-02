@@ -1,7 +1,7 @@
-[← Matrix Transpose](../README.md) · **Design** · [Results](results.md) ·
-[Benchmarking](benchmarking.md) · [Profiling](profiling.md)
+# Design
 
-# Matrix Transpose: steps 0–3
+[← Matrix Transpose](../README.md) · **Design** · [Results](results.md) · [Testing](testing.md) ·
+[Benchmarking](benchmarking.md) · [Profiling](profiling.md)
 
 ## 0. Source verification
 
@@ -34,7 +34,8 @@ A transposed view alone does not satisfy the output layout or ownership contract
 Even `a.t().contiguous()` can alias a singleton input, so cloning is required.
 CPU tests independently construct expected outputs by indexed assignment, check
 ownership and mutation, cover rectangular/tile-tail/empty/offset inputs, and
-compare integer views for special bit patterns. CUDA/Triton remain scaffold stubs.
+compare integer views for special bit patterns. Every GPU backend is checked against it
+bit for bit; see [testing](testing.md).
 
 ## 3. Simple performance model
 
@@ -68,3 +69,22 @@ Compare measured transpose against problem 7's copy on identical shape, dtype,
 cache state and timing scope. Logical bytes are not measured DRAM traffic;
 cache residency and scattered transactions can change the relevant bandwidth.
 Measured on an RTX 5080: the bank-conflict hypotheses hold exactly; see [results](results.md).
+
+## 4. Variants and hypotheses
+
+Every GPU variant moves integers of the element's width (`uint32_t`/`uint16_t` in CUDA,
+`int32`/`int16` views in Triton), so FP16 and BF16 share one kernel and no value passes
+through a floating-point register.
+
+| Backend | Kernel | Hypothesis |
+|---|---|---|
+| `cuda_naive_row` | One thread per element, threads along input rows | Coalesced loads, 32 sectors per store request |
+| `cuda_naive_col` | One thread per element, threads along input columns | Coalesced stores, 32 sectors per load request; which side hurts more depends on dtype and cache state |
+| `cuda_smem` | 32 × 32 shared tile, 32 × 8 threads | Both sides coalesce; column reads are 32-way (FP32) / 16-way (FP16) bank conflicts |
+| `cuda_smem_pad` (`cuda`) | The same tile padded to 32 × 33 | Conflict-free in FP32; up to 2-way (1.5 average) in FP16, since a 2-byte pad is half a bank word |
+| `cuda_smem_swizzle` | The same tile, word-granular XOR swizzle | Conflict-free in both widths with no extra shared memory |
+| `cuda_vec_ilp` | 16 × 256 tile, 16-byte packs, several per thread, cross-row XOR swizzle | Conflict-free; 4–8× fewer memory instructions, which should matter once data is in L2 |
+| `triton` | 64 × 64 tile loaded as [input column, input row]; the compiler converts the layout | Matches the CUDA tiles when DRAM-bound; its call costs more |
+
+The two copy ceilings (memcpy and 07 · Matrix Copy's `cuda_vec`) are plain copies, not
+transposes, and bound what any variant can reach.

@@ -9,8 +9,8 @@ export CUDA_HOME=${CUDA_HOME:-/usr/local/cuda}
 export PATH="$CUDA_HOME/bin:$PATH"
 export TORCH_EXTENSIONS_DIR=${TORCH_EXTENSIONS_DIR:-$PWD/artifacts/torch_extensions}
 mkdir -p "$out/ncu/full" "$out/nsys" "$out/sass"
-# `cuda` is an alias of cuda_smem_pad and is not timed separately; Triton is a stub.
-kernels=(cuda_naive_row cuda_naive_col cuda_smem cuda_smem_pad cuda_smem_swizzle cuda_vec_ilp)
+# `cuda` is an alias of cuda_smem_pad and is not timed separately.
+kernels=(cuda_naive_row cuda_naive_col cuda_smem cuda_smem_pad cuda_smem_swizzle cuda_vec_ilp triton)
 metrics=gpu__time_duration.sum,dram__bytes_op_read.sum,dram__bytes_op_write.sum
 metrics+=,lts__t_sector_hit_rate.pct,gpu__dram_throughput.avg.pct_of_peak_sustained_elapsed
 metrics+=,l1tex__t_sectors_pipe_lsu_mem_global_op_ld.sum,l1tex__t_requests_pipe_lsu_mem_global_op_ld.sum
@@ -33,7 +33,7 @@ if [[ ${SKIP_BENCH:-0} != 1 ]]; then
   "$python" -m pytest -q problems/matrix_transpose > "$out/tests.log" 2>&1
   for tool in memcheck racecheck synccheck initcheck; do
     compute-sanitizer --tool "$tool" --target-processes all --error-exitcode 1 \
-      "$python" -m pytest -q -p no:cacheprovider problems/matrix_transpose -k "cuda" \
+      "$python" -m pytest -q -p no:cacheprovider problems/matrix_transpose -k "cuda or triton" \
       > "$out/sanitizer_$tool.log" 2>&1
   done
   # Three complete runs of every kernel with memcpy as the reference, then 07's cuda_vec

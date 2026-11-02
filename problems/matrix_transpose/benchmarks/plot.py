@@ -18,7 +18,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 # A subset that answers the study's questions; every backend is tabulated in results.md.
-# Categorical slots 1–6 of the lab palette, in their validated order.
+# Categorical slots 1–7 of the lab palette, in their validated order.
 SERIES = (
     ("cuda_naive_row", "#2a78d6", "o"),
     ("cuda_smem", "#eb6834", "D"),
@@ -26,6 +26,7 @@ SERIES = (
     ("cuda_smem_swizzle", "#eda100", "^"),
     ("cuda_vec_ilp", "#e87ba4", "v"),
     ("pytorch", "#008300", "X"),
+    ("triton", "#6250d6", "P"),
 )
 # Plain copies of the input, not transposes: the ceiling a transpose can at best match.
 REFERENCES = (

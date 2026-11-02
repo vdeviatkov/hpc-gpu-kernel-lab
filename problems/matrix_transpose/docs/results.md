@@ -1,6 +1,6 @@
 # Results
 
-[← Matrix Transpose](../README.md) · [Design](design.md) · **Results** ·
+[← Matrix Transpose](../README.md) · [Design](design.md) · **Results** · [Testing](testing.md) ·
 [Benchmarking](benchmarking.md) · [Profiling](profiling.md)
 
 **Session:** 2026-10-31 PDT (2026-11-01 01:52 UTC), cuda.0, RTX 5080 (84 SMs, 64 MiB L2),

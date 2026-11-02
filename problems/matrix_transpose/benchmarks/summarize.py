@@ -53,6 +53,7 @@ ORDER = (
     "cuda_smem_pad",
     "cuda_smem_swizzle",
     "cuda_vec_ilp",
+    "triton",
 )
 # Plain contiguous copies of the input (not transposes): bandwidth ceilings, listed first and
 # set apart in every table so they are not read as competing transposes.
@@ -107,7 +108,7 @@ def benchmarks(root):
         root,
         "device_*.json",
         {"copy_reference": "memcpy", "pytorch": "pytorch"}
-        | {b: b for b in ORDER if b.startswith("cuda_")},
+        | {b: b for b in ORDER if b.startswith("cuda_") or b == "triton"},
     )
     env_c, copy = load_runs(root, "copy_*.json", {"cuda_vec": "copy_cuda_vec"})
     rows = []

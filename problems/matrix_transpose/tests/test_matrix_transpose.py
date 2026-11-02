@@ -4,8 +4,10 @@ import pytest
 
 from lab.data import Sampler
 from lab.testing import (
+    call_or_skip,
     case_id,
     check_against_reference,
+    device,
     skip_if_unavailable,
     skip_unsupported_dtype,
 )
@@ -17,6 +19,99 @@ from problems.matrix_transpose import api, cases
 @pytest.mark.parametrize("backend", [b for b in api.BACKENDS if b != "pytorch"])
 def test_matches_reference(backend, case, dtype):
     check_against_reference(api, cases, backend, case, dtype)
+
+
+# Bit patterns a value-level comparison cannot tell apart, or that a kernel moving data
+# through arithmetic would alter: signed zeros, infinities, quiet and signalling NaNs with
+# distinct payloads and signs, the smallest and largest subnormals, the largest finite
+# value and 1.0. The same set as 07 · Matrix Copy.
+SPECIAL_BITS = {
+    "fp32": [
+        0x00000000, 0x80000000, 0x7F800000, 0xFF800000, 0x7FC00000, 0x7FC00001,
+        0xFFC12345, 0x7F800001, 0x00000001, 0x007FFFFF, 0x7F7FFFFF, 0x3F800000,
+    ],
+    "fp16": [
+        0x0000, 0x8000, 0x7C00, 0xFC00, 0x7E00, 0x7E01,
+        0xFD23, 0x7C01, 0x0001, 0x03FF, 0x7BFF, 0x3C00,
+    ],
+    "bf16": [
+        0x0000, 0x8000, 0x7F80, 0xFF80, 0x7FC0, 0x7FC1,
+        0xFFA5, 0x7F81, 0x0001, 0x007F, 0x7F7F, 0x3F80,
+    ],
+}  # fmt: skip
+
+
+def bits(t):
+    import torch
+
+    return t.view(torch.int32 if t.element_size() == 4 else torch.int16)
+
+
+def run(backend, a):
+    skip_if_unavailable(backend, api)
+    skip_unsupported_dtype(a.dtype)
+    return call_or_skip(api, backend, (a.to(device()),))
+
+
+@pytest.mark.parametrize("dtype", api.DTYPES)
+@pytest.mark.parametrize("backend", api.BACKENDS)
+def test_special_values_bit_exact(backend, dtype):
+    """Special patterns at every position of an odd-shaped matrix, beside random bits."""
+    import torch
+
+    name, dtype = dtype, api.DTYPES[dtype]
+    integer = torch.int32 if dtype == torch.float32 else torch.int16
+    width = 8 * torch.empty((), dtype=dtype).element_size()
+    special = torch.tensor(
+        [p - (1 << width) if p >> (width - 1) else p for p in SPECIAL_BITS[name]], dtype=integer
+    )
+    m, n = 7, 13
+    info = torch.iinfo(integer)
+    generator = torch.Generator().manual_seed(0)
+    flat = torch.randint(info.min, info.max + 1, (m * n,), generator=generator).to(integer)
+    # Rotate the specials through every row and column, including the tails.
+    for start in range(0, m * n, len(special) + 1):
+        stop = min(start + len(special), m * n)
+        flat[start:stop] = special[: stop - start]
+    a = flat.view(dtype).reshape(m, n)
+    out = run(backend, a.clone())
+    assert out.shape == (n, m) and out.dtype == dtype
+    assert torch.equal(bits(out.cpu()), bits(a).t())
+
+
+@pytest.mark.parametrize("dtype", api.DTYPES)
+@pytest.mark.parametrize("backend", api.BACKENDS)
+def test_misaligned_input(backend, dtype):
+    """A matrix starting one element into its storage is not 16-byte aligned: vector paths
+    must fall back. 40 x 520 would otherwise take cuda_vec_ilp's pack path."""
+    import torch
+
+    m, n = 40, 520
+    full = Sampler(api.DTYPES[dtype], device()).randn(1 + m * n)
+    a = full[1:].view(m, n)
+    assert a.is_contiguous() and a.data_ptr() % 16 != 0
+    assert torch.equal(bits(run(backend, a).cpu()), bits(a.cpu()).t())
+
+
+@pytest.mark.parametrize("tile", [(16, 128), (128, 16), (32, 32), (1, 1024)], ids=str)
+def test_triton_tile_shapes(tile):
+    import torch
+
+    skip_if_unavailable("triton", api)
+    a = Sampler(torch.float16, device()).randn(65, 129)
+    block_m, block_n = tile
+    out = api.transpose(a, backend="triton", block_m=block_m, block_n=block_n)
+    assert torch.equal(bits(out), bits(a).t())
+
+
+def test_triton_rejects_invalid_options():
+    import torch
+
+    skip_if_unavailable("triton", api)
+    a = torch.zeros(4, 8, device="cuda")
+    for options in [{"block_m": 0}, {"block_n": 48}, {"num_warps": 3}]:
+        with pytest.raises(ValueError):
+            api.transpose(a, backend="triton", **options)
 
 
 def test_rejects_unknown_backend():

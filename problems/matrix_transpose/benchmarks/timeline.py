@@ -18,7 +18,7 @@ from lab.data import Sampler
 from problems.matrix_copy import api as copy_api
 from problems.matrix_transpose import api, cases
 
-BACKENDS = ("pytorch", *api.VARIANTS)
+BACKENDS = ("pytorch", *api.VARIANTS, "triton")
 COPY_BACKENDS = ("pytorch", "cuda_vec")
 
 

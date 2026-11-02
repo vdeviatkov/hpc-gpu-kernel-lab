@@ -1,6 +1,6 @@
 # Benchmarking
 
-[← Matrix Transpose](../README.md) · [Design](design.md) · [Results](results.md) ·
+[← Matrix Transpose](../README.md) · [Design](design.md) · [Results](results.md) · [Testing](testing.md) ·
 **Benchmarking** · [Profiling](profiling.md)
 
 Matrix Transpose uses the shared runner in [lab/bench.py](../../../lab/bench.py). Lab-wide

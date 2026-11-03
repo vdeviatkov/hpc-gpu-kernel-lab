@@ -29,7 +29,7 @@ Status: ⬜ Planned · 🟨 In Progress · ✅ Complete · 🚀 Optimized.
 | 06 | [Rainbow Table](problems/rainbow_table/README.md) | ✅ | ✅ | ✅ | — | Integer instruction throughput | ✅ Complete |
 | 07 | [Matrix Copy](problems/matrix_copy/README.md) | ✅ | ✅ | ✅ | — | Memory bandwidth ceiling | ✅ Complete |
 | 08 | [Matrix Transpose](problems/matrix_transpose/README.md) | ✅ | ✅ | ✅ | — | Shared-memory bank conflicts | ✅ Complete |
-| 09 | [1D Convolution](problems/convolution_1d/README.md) | — | — | — | — | Halo reuse in shared memory | ⬜ Planned |
+| 09 | [1D Convolution](problems/convolution_1d/README.md) | — | — | ✅ | — | Halo reuse in shared memory | 🟨 In Progress |
 | 10 | [Gaussian Blur](problems/gaussian_blur/README.md) | — | — | — | — | Separable filtering tradeoffs | ⬜ Planned |
 | 11 | [2D Max Pooling](problems/max_pooling_2d/README.md) | — | — | — | — | Overlapping window locality | ⬜ Planned |
 | 12 | [Weight Dequantization](problems/weight_dequantization/README.md) | — | — | — | — | Scale-tile locality | ⬜ Planned |

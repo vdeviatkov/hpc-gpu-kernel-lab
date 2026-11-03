@@ -35,7 +35,8 @@ A one-dimensional stencil introduces reuse across neighboring outputs and the co
 
 ## Planned implementations
 
-- [ ] PyTorch correctness reference and meaningful baseline
+- [x] PyTorch correctness reference and meaningful baseline (`F.conv1d`, TF32 off;
+  validated against an FP64 oracle; see [design](docs/design.md))
 - [ ] CUDA straightforward baseline
 - [ ] CUDA named optimization variants
 - [ ] Triton implementation with explicit tile/warp choices
@@ -90,10 +91,17 @@ Separate source conformance from broader shape/dtype experiments. Use the
 
 ## Status
 
-⬜ **Planned**
+🟨 **In progress**
 
-No accepted implementation or measured results for this curriculum entry.
-Results pending hardware benchmark.
+Contract, PyTorch reference, FP64-oracle tests and the performance model are done; see
+[design](docs/design.md). The reference passes on CPU and on the RTX 5080. The LeetGPU
+source contract is not yet verified. CUDA, Triton and JAX backends are not implemented.
+
+Model in brief: arithmetic intensity is about K/s FLOP/B, and the measured RTX 5080 ridge
+is 64 FLOP/B (73 at achieved ceilings). FP32 K = 31 is DRAM-bound and K = 255 sits on the
+ridge. The naive kernel should be LSU/L1-bound, 7–10× off the roofline at K = 255, while
+moving near-minimum DRAM bytes. Register blocking, not shared memory alone, is expected to
+close that gap.
 
 Follow the [optimization methodology](../../docs/methodology.md). When work
 begins, add evidence and update the [roadmap status](../../README.md#roadmap).

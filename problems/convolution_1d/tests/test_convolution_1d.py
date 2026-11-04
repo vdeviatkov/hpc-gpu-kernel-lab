@@ -190,6 +190,29 @@ def test_misaligned_input(backend, dtype, which):
     torch.testing.assert_close(out, expected, rtol=rtol, atol=atol)
 
 
+@pytest.mark.parametrize(
+    "options",
+    [{"block_size": 32, "num_warps": 1}, {"block_size": 128}, {"block_size": 4096, "num_warps": 8}],
+    ids=str,
+)
+@pytest.mark.parametrize("case", [{"n": 1, "k": 1}, {"n": 5000, "k": 255}], ids=case_id)
+def test_triton_tile_shapes(options, case):
+    """Programs smaller than a warp, a single partial program, and many full ones."""
+    skip_if_unavailable("triton", api)
+    x, w = cases.make_inputs(case, Sampler(torch.float16, device(), seed=5))
+    rtol, atol = api.TOLERANCES[torch.float16]
+    out = api.conv1d(x, w, backend="triton", **options)
+    torch.testing.assert_close(out, api.conv1d(x, w), rtol=rtol, atol=atol)
+
+
+def test_triton_rejects_invalid_options():
+    skip_if_unavailable("triton", api)
+    x, w = torch.zeros(8, device="cuda"), torch.zeros(3, device="cuda")
+    for options in [{"block_size": 0}, {"block_size": 48}, {"num_warps": 3}]:
+        with pytest.raises(ValueError):
+            api.conv1d(x, w, backend="triton", **options)
+
+
 def test_rejects_invalid_inputs():
     x, w = torch.zeros(8), torch.zeros(3)
     bad = [

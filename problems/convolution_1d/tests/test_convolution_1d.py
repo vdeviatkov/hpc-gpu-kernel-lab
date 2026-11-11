@@ -251,3 +251,101 @@ def test_traffic_model():
     assert cases.logical_bytes(c, torch.float32) == 4 * (2 * 25_000_000 + 1)
     assert cases.logical_bytes(c, torch.float16) == 2 * (2 * 25_000_000 + 1)
     assert cases.flops(c) == 2 * 255 * (25_000_000 - 254)
+
+
+# --- CUDA variants --------------------------------------------------------------------
+
+CUDA_VARIANTS = {
+    name: options["variant"] for name, (module, options) in api.VARIANTS.items() if module == "cuda"
+}
+
+
+def cuda_extension():
+    skip_if_unavailable("cuda")
+    from problems.convolution_1d.cuda.implementation import extension
+
+    return extension()
+
+
+@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+def test_cuda_const_capacity(dtype):
+    """K = 16384 fills the 64 KiB __constant__ buffer exactly; one more tap is rejected.
+    FP16/BF16 keep FP32 summation noise far below atol at this K (FP32 would not; see
+    docs/design.md, "Tolerances")."""
+    from problems.convolution_1d.cuda.implementation import MAX_CONST_TAPS
+
+    ext = cuda_extension()
+    assert ext.max_const_taps() == MAX_CONST_TAPS == 16384
+    dtype = api.DTYPES[dtype]
+    skip_unsupported_dtype(dtype)
+    s = Sampler(dtype, "cuda", seed=6)
+    x, w = s.randn(MAX_CONST_TAPS + 777), s.randn(MAX_CONST_TAPS)
+    rtol, atol = api.TOLERANCES[dtype]
+    out = api.conv1d(x, w, backend="cuda_const")
+    torch.testing.assert_close(out, api.conv1d(x, w), rtol=rtol, atol=atol)
+    with pytest.raises(ValueError, match="16384"):
+        api.conv1d(x, s.randn(MAX_CONST_TAPS + 1), backend="cuda_const")
+
+
+def test_cuda_const_reloads_filter():
+    """__constant__ memory persists between calls: each call must upload its own filter,
+    including a shorter one after a longer one, with no host synchronization between."""
+    skip_if_unavailable("cuda")
+    s = Sampler(torch.float32, "cuda", seed=7)
+    x = s.randn(4096)
+    filters = [s.randn(255), s.randn(3), s.randn(255), s.randn(31)]
+    outs = [api.conv1d(x, w, backend="cuda_const") for w in filters]
+    rtol, atol = api.TOLERANCES[torch.float32]
+    for w, out in zip(filters, outs, strict=True):
+        torch.testing.assert_close(out, api.conv1d(x, w), rtol=rtol, atol=atol)
+
+
+def test_cuda_rejects_invalid_variant():
+    skip_if_unavailable("cuda")
+    x, w = torch.zeros(8, device="cuda"), torch.zeros(3, device="cuda")
+    with pytest.raises(ValueError):
+        api.conv1d(x, w, backend="cuda", variant=2)
+
+
+@pytest.mark.parametrize("dtype", api.DTYPES)
+@pytest.mark.parametrize("backend", CUDA_VARIANTS)
+def test_binding_misaligned_output(backend, dtype):
+    """The api always allocates an aligned output, so a misaligned one needs a direct call.
+    Elements outside the output view must stay untouched."""
+    dtype = api.DTYPES[dtype]
+    skip_unsupported_dtype(dtype)
+    ext = cuda_extension()
+    n, k = 1031, 37
+    s = Sampler(dtype, "cuda", seed=8)
+    x, w = s.randn(n), s.randn(k)
+    buffer = torch.full((n - k + 3,), -7.0, dtype=dtype, device="cuda")
+    out = buffer[1 : n - k + 2]
+    assert out.data_ptr() % 16 != 0
+    ext.conv1d(x, w, out, CUDA_VARIANTS[backend])
+    rtol, atol = api.TOLERANCES[dtype]
+    torch.testing.assert_close(out, api.conv1d(x, w), rtol=rtol, atol=atol)
+    assert buffer[0].item() == -7.0 and buffer[-1].item() == -7.0
+
+
+def test_binding_rejects_invalid_arguments():
+    ext = cuda_extension()
+    x, w = torch.zeros(8, device="cuda"), torch.zeros(3, device="cuda")
+    out = torch.empty(6, device="cuda")
+    shared = torch.zeros(16, device="cuda")
+    bad_calls = [
+        (x, w, out, -1),  # variant
+        (x, w, out, 2),
+        (x, w, torch.empty(5, device="cuda"), 0),  # wrong output length
+        (x, w, out.half(), 0),  # dtype mismatch
+        (x, w.half(), out, 0),
+        (x.double(), w.double(), out.double(), 0),  # fp64
+        (x.cpu(), w.cpu(), out.cpu(), 0),  # host tensors
+        (x[None], w, out, 0),  # 2-D
+        (torch.zeros(16, device="cuda")[::2], w, out, 0),  # non-contiguous
+        (x, torch.zeros(9, device="cuda"), torch.empty(0, device="cuda"), 0),  # K > N
+        (shared[:8], w, shared[2:8], 0),  # output overlaps x
+        (x, shared[:3], shared[1:7], 1),  # output overlaps w
+    ]
+    for args in bad_calls:
+        with pytest.raises(RuntimeError):
+            ext.conv1d(*args)

@@ -294,3 +294,24 @@ without `cudnn.benchmark`:
 The FP16, K = 255 reference therefore takes almost a second per call. That is acceptable
 for a correctness reference but makes it a poor performance baseline: compare kernels
 with the roofline and with each other.
+
+## 5. CUDA variants
+
+Both kernels use one thread per output, 256 threads per block, FP32 accumulation with
+`fmaf`, and a single rounding to the input dtype. `cuda` is an alias for `cuda_naive`,
+the CUDA kernel that accepts every K.
+
+| Backend | Kernel | Hypothesis |
+|---|---|---|
+| `cuda_naive` (`cuda`) | `x` and `w` read from global memory | L1 hit rate is high, but the kernel is limited by LSU/L1. Per tap a warp issues 2 global loads: a coalesced, `j`-misaligned `x` load and a broadcast `w` load. That is 2K load instructions per 32 outputs, against the 2s-byte DRAM minimum per output |
+| `cuda_const` | `w` converted to FP32 and staged in `__constant__` memory | Every lane reads the same tap, so the constant cache broadcasts it and the `w` loads leave the LSU/L1 pipe. Requests per tap fall from 2 to 1, so up to 2× faster if requests are the limit (§4) |
+
+**Constant-memory details.** The filter is stored as FP32, so the capacity is the whole
+64 KiB user constant bank, 16384 taps, for every dtype. FP16/BF16 filters stored natively
+would fit 32768 taps but would need a conversion per tap. Each call converts `w` to FP32
+(no copy for FP32) and uploads it with `cudaMemcpyToSymbolAsync` on the current stream,
+before the kernel. One buffer per device serves every call, so calls on one stream are
+safe, but concurrent `cuda_const` calls on different streams of one device would race.
+K > 16384 is rejected with `ValueError` rather than silently falling back.
+`test_cuda_const_reloads_filter` covers back-to-back calls with long and short filters
+and no host synchronization in between.

@@ -22,7 +22,14 @@ import torch
 from lab import dispatch
 
 FUNCTION = "conv1d"
-BACKENDS = ("pytorch", "cuda", "triton", "jax")
+VARIANTS = {
+    # One thread per output; x and w read from global memory.
+    "cuda_naive": ("cuda", {"variant": 0}),
+    # The same, with w staged as FP32 in __constant__ memory (K <= 16384).
+    "cuda_const": ("cuda", {"variant": 1}),
+}
+# `cuda` is cuda_naive: the CUDA kernel that accepts every K.
+BACKENDS = ("pytorch", *VARIANTS, "cuda", "triton", "jax")
 DTYPES = {
     "fp32": torch.float32,
     "fp16": torch.float16,

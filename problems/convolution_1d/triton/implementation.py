@@ -4,8 +4,8 @@ Each program keeps BLOCK FP32 accumulators and walks the K filter taps. Per tap 
 one w element (the same address for every lane) and the window x[offs + j], then does one
 FMA per output. This is the naive per-output stencil from docs/design.md: neighbouring
 programs re-read each x element up to K times, mostly from L1/L2. The result is rounded
-once to the input dtype. Tile size and warp count are explicit arguments; there is no
-autotuning.
+once to the input dtype. Tile size and warp count are explicit arguments with no
+autotuning; the default tile depends only on the dtype (see default_block_size).
 """
 
 import torch
@@ -35,7 +35,22 @@ def _power_of_two(value):
     return value > 0 and not value & (value - 1)
 
 
-def conv1d(x, w, *, block_size=1024, num_warps=4):
+def default_block_size(element_size, num_warps):
+    """8 bytes of outputs per thread: 2 FP32 or 4 FP16/BF16 elements.
+
+    Triton gives each thread block_size / (32 * num_warps) consecutive outputs. The
+    window x[offs + j] is misaligned for most j, so each output costs one scalar load per
+    tap, and a warp's load spans 32 * (bytes per thread) of address space. Measured on the
+    RTX 5080, L1 accepts about 0.5 load requests and 1 data wavefront per SM per clock.
+    Fewer bytes per thread run out of requests; more run out of wavefronts. 8 bytes
+    balances the two (docs/design.md, "Triton").
+    """
+    return 32 * num_warps * max(1, 8 // element_size)
+
+
+def conv1d(x, w, *, block_size=None, num_warps=4):
+    if block_size is None:
+        block_size = default_block_size(x.element_size(), num_warps)
     if not _power_of_two(block_size):
         raise ValueError("block_size must be a positive power of two")
     if num_warps not in (1, 2, 4, 8, 16, 32):

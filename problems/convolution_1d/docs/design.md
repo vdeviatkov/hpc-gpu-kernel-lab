@@ -196,3 +196,101 @@ Two caveats for the profiling step. Nsight Compute locks clocks to base by defau
 its utilization percentages, not its durations, against the 2827 MHz ceilings above. Also,
 the FFMA peak assumes FFMA is the only instruction: address arithmetic, conversions and
 loop overhead must stay small relative to R·K FFMAs per thread.
+
+## 4. Triton: the naive stencil, measured
+
+`triton/implementation.py` is the per-output stencil from §3. Each program owns BLOCK
+consecutive outputs in FP32 accumulators. Per tap it loads `w[j]` (one address) and the
+window `x[offs + j]`, then does one FMA per output. Triton spreads the BLOCK outputs over
+`32 · num_warps` threads, so each thread owns `E = BLOCK / (32 · num_warps)` consecutive
+outputs. The window starts at an arbitrary `j`, so the compiler cannot prove alignment and
+emits E scalar loads per tap, not one vector load.
+
+### The hypothesis holds: LSU/L1-bound, DRAM idle
+
+Nsight Compute, FP32, N = 25,000,000, with the originally submitted tile (BLOCK = 1024,
+4 warps, E = 8):
+
+| Metric | K = 31 | K = 255 |
+|---|---:|---:|
+| L1 throughput (% of peak) | 98.1 | 99.7 |
+| Warp stalls on LG throttle (%) | 67.8 | 69.5 |
+| FMA pipe active (%) | 11.6 | 12.3 |
+| L1 hit rate (%) | 98.4 | 99.7 |
+| L2 ↔ L1 bytes (minimum 200 MB) | 230 MB | 289 MB |
+| DRAM throughput (% of peak) | 38.8 | 5.0 |
+
+DRAM traffic stays near its minimum while L1 is saturated and the FMA pipe is mostly idle.
+Precision makes no difference: FP16 and BF16 take the same time as FP32 despite moving
+half the bytes. This holds even at K = 31, which the roofline calls DRAM-bound: the naive
+kernel takes about 450 µs against a 249 µs DRAM floor.
+
+### What actually saturates: requests and wavefronts
+
+A tile sweep (K = 255, FP32) found that one element per thread, the fully coalesced
+layout, is *not* the fastest. Seven Nsight Compute profiles fit a two-resource model to
+about 1%. At 2.70 GHz, L1 accepts about **0.50 load requests** (`l1tex__lsuin_requests`)
+and returns about **1.0 data wavefront** per SM per clock:
+
+| dtype | E | bytes/thread | requests (M) | wavefronts (M) | wavefronts/request | limiter | ncu time |
+|---|---:|---:|---:|---:|---:|---|---:|
+| fp32 | 1 | 4 | 398 | 435 | 1.09 | requests (99.9%) | 3.54 ms |
+| fp32 | 2 | 8 | 299 | 520 | 1.74 | requests | 2.66 ms |
+| fp32 | 4 | 16 | 249 | 860 | 3.45 | wavefronts | 3.81 ms |
+| fp32 | 8 | 32 | 224 | 828 | 3.69 | wavefronts (99.7%) | 3.68 ms |
+| fp16 | 2 | 4 | 299 | 308 | 1.03 | requests | 2.66 ms |
+| fp16 | 4 | 8 | 249 | 456 | 1.83 | both (99.7% / 90.9%) | 2.22 ms |
+| fp16 | 8 | 16 | 224 | 827 | 3.69 | wavefronts | 3.67 ms |
+
+Per 32·E outputs and per tap, a warp issues E requests for `x` and one for `w`, so more
+outputs per thread means fewer requests. But a warp's scalar load spans 32·E·s bytes, so
+wavefronts per request grow with bytes per thread. **8 bytes per thread balances the two**,
+so the default tile is `32 · num_warps · 8/s`: 256 for FP32 and 512 for FP16/BF16 at
+4 warps. That is 1.4× (FP32) and 1.65× (FP16/BF16) faster than the original 1024 × 4 tile.
+
+The balanced FP16 tile runs at its request limit: 249M requests / (84 SMs · 0.5/clk ·
+2.827 GHz) = 2.10 ms, against 2.12 ms measured. **No tile choice can take this design
+past about 6 TFLOP/s.** That is the 5–7.6 TFLOP/s band §3 predicted, 8–10× below the
+roofline at K = 255. Closing the gap needs fewer L1 requests per FMA, which means register
+reuse of each loaded `x` across several outputs (§3, corollary 4). Triton exposes no
+register shifts for this pattern, so the plan is to test that in the CUDA variants.
+
+### Benchmark (default tile)
+
+`lab.bench`, 2026-11-03, RTX 5080 (cuda.0; clocks unlocked, no other compute processes),
+Triton 3.8.0, PyTorch 2.14.1, cuDNN 9.24. Each value is the median of three run medians,
+each taken from CUDA-event samples with inputs reused and output allocation included.
+The run-median spread is 0.0–3.8% for Triton. `copy` is a device copy of `x`, the DRAM
+ceiling. Raw JSON and sanitizer logs are in `artifacts/convolution_1d/`.
+
+| Case | dtype | triton µs | TFLOP/s | pytorch µs | copy µs | Roofline floor µs |
+|---|---|---:|---:|---:|---:|---:|
+| N = 2²⁰, K = 31 | fp32 | 25.5 | 2.55 | 137.3 | 9.2 | (L2-resident) |
+| | fp16 | 25.1 | 2.59 | 40.9 | 8.9 | |
+| | bf16 | 23.5 | 2.76 | 39.6 | 9.0 | |
+| N = 25M, K = 31 | fp32 | 334.2 | 4.64 | 3,034 | 245.3 | 249 (DRAM) |
+| | fp16 | 286.1 | 5.42 | 728 | 123.5 | 125 (DRAM) |
+| | bf16 | 281.2 | 5.51 | 725 | 123.7 | 125 (DRAM) |
+| N = 25M, K = 255 | fp32 | 2,533.8 | 5.03 | 19,673 | 246.0 | 249 (DRAM ≈ FMA) |
+| | fp16 | 2,128.4 | 5.99 | 860,601 | 123.5 | 218 (FMA) |
+| | bf16 | 2,119.7 | 6.01 | 3,683 | 123.5 | 218 (FMA) |
+
+Floors use the achieved ceilings (802 GB/s, 58.6 TFLOP/s). At K = 255, Triton is 10.2×
+(FP32) and 9.7× (FP16/BF16) above the floor. At K = 31 from DRAM it is 1.3× (FP32) and
+2.3× (FP16/BF16) above. Against cuDNN it is 1.6–9.1× faster, and 404× faster for the FP16
+K = 255 fallback.
+
+### The PyTorch baseline is not a strong competitor
+
+cuDNN picks a different algorithm for each dtype on this one-channel shape, with or
+without `cudnn.benchmark`:
+
+| dtype | K = 31 | K = 255 | kernel |
+|---|---:|---:|---|
+| fp32 | 2.99 ms | 19.4 ms | `implicit_convolve_sgemm` |
+| fp16 | 0.72 ms | **858 ms** | direct kernel at K = 31; `conv1D_NCHW_general` fallback at K = 255 |
+| bf16 | 0.72 ms | 3.63 ms | `conv2d_grouped_direct_kernel` |
+
+The FP16, K = 255 reference therefore takes almost a second per call. That is acceptable
+for a correctness reference but makes it a poor performance baseline: compare kernels
+with the roofline and with each other.

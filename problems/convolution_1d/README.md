@@ -39,7 +39,8 @@ A one-dimensional stencil introduces reuse across neighboring outputs and the co
   validated against an FP64 oracle; see [design](docs/design.md))
 - [ ] CUDA straightforward baseline
 - [ ] CUDA named optimization variants
-- [ ] Triton implementation with explicit tile/warp choices
+- [x] Triton implementation with explicit tile/warp choices (direct stencil, 8 bytes of
+  outputs per thread by default; see [design §4](docs/design.md#4-triton-the-naive-stencil-measured))
 - [ ] JAX/XLA comparison with compilation separated from execution
 
 JAX is included to examine XLA lowering/fusion or a meaningful high-level numerical baseline. A GPU comparison must use the same device, values, dtype, and completion scope.
@@ -51,13 +52,14 @@ Run the tests with `python -m pytest problems/convolution_1d` and benchmark with
 ```text
 convolution_1d/
     README.md    study plan and status
-    api.py       public entry point and draft contract
+    api.py       validated public contract
     cases.py     test and benchmark inputs, bytes and FLOPs
-    pytorch/     reference (stub)
+    pytorch/     F.conv1d reference (TF32 off)
     cuda/        kernels.cu, bindings.cpp, implementation.py (stubs)
-    triton/      Triton kernel (stub)
+    triton/      direct-stencil Triton kernel
     jax/         JAX baseline (stub)
     tests/       test_convolution_1d.py
+    docs/        design, performance model and measurements
 ```
 
 ## Optimization roadmap
@@ -93,15 +95,28 @@ Separate source conformance from broader shape/dtype experiments. Use the
 
 🟨 **In progress**
 
-Contract, PyTorch reference, FP64-oracle tests and the performance model are done; see
-[design](docs/design.md). The reference passes on CPU and on the RTX 5080. The LeetGPU
-source contract is not yet verified. CUDA, Triton and JAX backends are not implemented.
+Contract, PyTorch reference, FP64-oracle tests, performance model and the Triton backend
+are done; see [design](docs/design.md). On the RTX 5080: 114 tests passed, and Compute
+Sanitizer (memcheck, racecheck, synccheck, initcheck over the Triton tests) reports 0
+errors. The LeetGPU source contract is not yet verified. CUDA and JAX backends are not
+implemented.
 
 Model in brief: arithmetic intensity is about K/s FLOP/B, and the measured RTX 5080 ridge
 is 64 FLOP/B (73 at achieved ceilings). FP32 K = 31 is DRAM-bound and K = 255 sits on the
-ridge. The naive kernel should be LSU/L1-bound, 7–10× off the roofline at K = 255, while
-moving near-minimum DRAM bytes. Register blocking, not shared memory alone, is expected to
-close that gap.
+ridge.
+
+Measured so far:
+
+- **The naive stencil is LSU/L1-bound, not DRAM-bound.** Triton saturates L1 (99.7%)
+  while DRAM is 5% busy at K = 255. It runs at 5.0 (FP32) to 6.0 (FP16/BF16) TFLOP/s:
+  2.53 and 2.12 ms at N = 25M, K = 255, about 10× the 249 / 218 µs roofline floor. Even at
+  K = 31 it is 1.3× (FP32) to 2.3× (FP16) off the DRAM floor.
+- **L1 has two limits:** about 0.5 load requests and 1 wavefront per SM per clock. The
+  default tile of 8 bytes of outputs per thread balances them, 1.4–1.65× faster than
+  1024 outputs × 4 warps.
+- **cuDNN is a weak baseline here:** 1.6–9.1× slower than Triton, and 404× slower for FP16
+  K = 255, where it falls back to a generic kernel (861 ms).
+- Next: register-blocked CUDA variants to cut L1 requests per FMA.
 
 Follow the [optimization methodology](../../docs/methodology.md). When work
 begins, add evidence and update the [roadmap status](../../README.md#roadmap).

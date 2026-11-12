@@ -305,6 +305,7 @@ the CUDA kernel that accepts every K.
 |---|---|---|
 | `cuda_naive` (`cuda`) | `x` and `w` read from global memory | L1 hit rate is high, but the kernel is limited by LSU/L1. Per tap a warp issues 2 global loads: a coalesced, `j`-misaligned `x` load and a broadcast `w` load. That is 2K load instructions per 32 outputs, against the 2s-byte DRAM minimum per output |
 | `cuda_const` | `w` converted to FP32 and staged in `__constant__` memory | Every lane reads the same tap, so the constant cache broadcasts it and the `w` loads leave the LSU/L1 pipe. Requests per tap fall from 2 to 1, so up to 2× faster if requests are the limit (§4) |
+| `cuda_smem` | The block stages BLOCK + taps − 1 `x` values (BLOCK = 256) in shared memory behind a barrier; each thread reads its window from the tile; `w` as in naive | Each `x` is loaded from global about once per block, with halo overhead (taps − 1)/BLOCK. But LDS uses the same MIO/L1 data path as LDG, and `w` still costs one global load per tap, so requests per tap stay at 2. Only the line-crossing misalignment and tag lookups go away. Expect at most 1.5–2× over naive (§3, corollary 3), and for small K it may not beat naive plus L1 at all |
 
 **Constant-memory details.** The filter is stored as FP32, so the capacity is the whole
 64 KiB user constant bank, 16384 taps, for every dtype. FP16/BF16 filters stored natively
@@ -315,3 +316,12 @@ safe, but concurrent `cuda_const` calls on different streams of one device would
 K > 16384 is rejected with `ValueError` rather than silently falling back.
 `test_cuda_const_reloads_filter` covers back-to-back calls with long and short filters
 and no host synchronization in between.
+
+**Shared-tile details.** Shared memory is fixed at (256 + 1023)·s bytes (5 KB in FP32)
+because the filter is walked in chunks of 1024 taps. Each chunk loads a tile of
+256 + taps − 1 elements, synchronizes, accumulates, and synchronizes again before the next
+chunk overwrites the tile. For K ≤ 1024 this is a single tile with no second pass.
+Threads past the last output still load their share of the tile and reach every barrier;
+they only skip the store. Tile slots past the end of `x` are zero-filled.
+`test_cuda_smem_chunk_boundaries` covers K = 1023, 1024, 1025, 2049 and 3000 with a
+partial last block.

@@ -1,7 +1,8 @@
 """CUDA conv1d variants, built lazily and launched on the current PyTorch stream.
 
 variant 0 (cuda_naive): x and w from global memory. variant 1 (cuda_const): w staged as
-FP32 in __constant__ memory, at most MAX_CONST_TAPS taps. See cuda/kernels.cu.
+FP32 in __constant__ memory, at most MAX_CONST_TAPS taps. variant 2 (cuda_smem): a shared
+tile of x per block, filter walked in chunks of SMEM_CHUNK taps. See cuda/kernels.cu.
 """
 
 from pathlib import Path
@@ -12,6 +13,7 @@ from lab.cuda_ext import load_extension
 
 IMPLEMENTED = True
 MAX_CONST_TAPS = 16384  # 64 KiB of FP32; must match kMaxConstTaps in kernels.cu
+SMEM_CHUNK = 1024  # must match kChunk in kernels.cu
 
 
 def extension():
@@ -19,8 +21,8 @@ def extension():
 
 
 def conv1d(x, w, *, variant=0):
-    if variant not in (0, 1):
-        raise ValueError("variant must be 0 (naive) or 1 (const)")
+    if variant not in (0, 1, 2):
+        raise ValueError("variant must be 0 (naive), 1 (const) or 2 (smem)")
     if variant == 1 and w.numel() > MAX_CONST_TAPS:
         raise ValueError(f"cuda_const holds at most {MAX_CONST_TAPS} filter taps")
     out = torch.empty(x.numel() - w.numel() + 1, dtype=x.dtype, device=x.device)

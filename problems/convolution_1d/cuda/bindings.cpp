@@ -8,7 +8,7 @@ void launch_conv1d(const at::Tensor &x, const at::Tensor &w, at::Tensor out, int
 int64_t max_const_taps();
 
 void conv1d(const at::Tensor &x, const at::Tensor &w, at::Tensor out, int64_t variant) {
-  TORCH_CHECK(variant == 0 || variant == 1, "conv1d: invalid variant");
+  TORCH_CHECK(variant >= 0 && variant <= 2, "conv1d: invalid variant");
   for (const auto &t : {x, w, out}) {
     lab::check_cuda_vector(t, "conv1d");
     lab::check_plain(t, "conv1d");

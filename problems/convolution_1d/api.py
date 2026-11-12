@@ -27,6 +27,8 @@ VARIANTS = {
     "cuda_naive": ("cuda", {"variant": 0}),
     # The same, with w staged as FP32 in __constant__ memory (K <= 16384).
     "cuda_const": ("cuda", {"variant": 1}),
+    # A shared tile of BLOCK + K - 1 x values per block behind a barrier; w as in naive.
+    "cuda_smem": ("cuda", {"variant": 2}),
 }
 # `cuda` is cuda_naive: the CUDA kernel that accepts every K.
 BACKENDS = ("pytorch", *VARIANTS, "cuda", "triton", "jax")

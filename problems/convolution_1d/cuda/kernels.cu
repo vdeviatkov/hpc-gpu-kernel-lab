@@ -1,7 +1,7 @@
 // 09 · 1D Convolution: CUDA kernels.
 //
 // out[i] = sum_j x[i + j] * w[j] for i < m = N - K + 1, accumulated in FP32 and rounded once
-// to the input dtype. One thread per output in both variants:
+// to the input dtype. One thread per output in every variant:
 //
 //   0 conv1d_naive  x and w read from global memory. Per tap a warp issues one coalesced
 //                   (but j-misaligned) x load and one broadcast w load; L1 absorbs the
@@ -9,6 +9,11 @@
 //   1 conv1d_const  w converted to FP32 and staged in __constant__ memory. Every lane reads
 //                   the same tap, which the constant cache broadcasts, so the w loads leave
 //                   the LSU/L1 pipe; x loads are unchanged. Capacity: kMaxConstTaps taps.
+//   2 conv1d_smem   the block stages kThreads + taps - 1 x values in shared memory behind a
+//                   barrier, then each thread reads its window from the tile; w as in naive.
+//                   Each x is loaded from global about once per block (halo overhead
+//                   (taps - 1) / kThreads). The filter is walked in chunks of kChunk taps, so
+//                   shared memory stays fixed for any K.
 //
 // __constant__ memory is one buffer per device, shared by every call. Calls on one stream
 // are ordered (each upload waits for the previous kernel), but conv1d_const calls running
@@ -32,6 +37,9 @@ constexpr int kThreads = 256;
 constexpr int64_t kMaxConstTaps = 16384;
 
 __constant__ float c_w[kMaxConstTaps];
+
+// conv1d_smem filter chunk: a tile of kThreads + kChunk - 1 elements (5 KB in FP32).
+constexpr int kChunk = 1024;
 
 template <typename T>
 __global__ void conv1d_naive(const T *__restrict__ x, const T *__restrict__ w, T *__restrict__ out,
@@ -58,6 +66,35 @@ __global__ void conv1d_const(const T *__restrict__ x, T *__restrict__ out, int64
   out[i] = static_cast<T>(acc);
 }
 
+// Every thread of the block must reach both barriers, including threads past the last
+// output (i >= m) in the final block: they still load their share of the tile and only
+// skip the store. Tile slots past the end of x are zero-filled, so no thread reads
+// unwritten shared memory.
+template <typename T>
+__global__ void conv1d_smem(const T *__restrict__ x, const T *__restrict__ w, T *__restrict__ out,
+                            int64_t n, int64_t m, int k) {
+  extern __shared__ __align__(16) unsigned char smem_raw[];
+  T *tile = reinterpret_cast<T *>(smem_raw);
+  const int64_t base = int64_t(blockIdx.x) * blockDim.x;
+  const int64_t i = base + threadIdx.x;
+
+  float acc = 0.0f;
+  for (int j0 = 0; j0 < k; j0 += kChunk) {
+    const int taps = min(kChunk, k - j0);
+    const int width = blockDim.x + taps - 1;
+    const int64_t start = base + j0;  // x index of tile[0]
+    for (int t = threadIdx.x; t < width; t += blockDim.x)
+      tile[t] = start + t < n ? x[start + t] : T(0.0f);
+    __syncthreads();
+
+    const T *xi = tile + threadIdx.x;
+    for (int j = 0; j < taps; ++j)
+      acc = fmaf(static_cast<float>(xi[j]), static_cast<float>(w[j0 + j]), acc);
+    __syncthreads();  // the next chunk overwrites the tile
+  }
+  if (i < m)
+    out[i] = static_cast<T>(acc);
+}
 } // namespace
 
 int64_t max_const_taps() { return kMaxConstTaps; }
@@ -84,11 +121,16 @@ void launch_conv1d(const at::Tensor &x, const at::Tensor &w, at::Tensor out, int
   AT_DISPATCH_FLOATING_TYPES_AND2(at::kHalf, at::kBFloat16, x.scalar_type(), "conv1d", [&] {
     const auto *xp = x.data_ptr<scalar_t>();
     auto *op = out.data_ptr<scalar_t>();
-    if (variant == 0)
-      conv1d_naive<scalar_t><<<blocks, kThreads, 0, stream>>>(xp, w.data_ptr<scalar_t>(), op, m,
-                                                              static_cast<int>(k));
-    else
-      conv1d_const<scalar_t><<<blocks, kThreads, 0, stream>>>(xp, op, m, static_cast<int>(k));
+    const int k32 = static_cast<int>(k);
+    if (variant == 0) {
+      conv1d_naive<scalar_t><<<blocks, kThreads, 0, stream>>>(xp, w.data_ptr<scalar_t>(), op, m, k32);
+    } else if (variant == 1) {
+      conv1d_const<scalar_t><<<blocks, kThreads, 0, stream>>>(xp, op, m, k32);
+    } else {
+      const size_t smem = (kThreads + kChunk - 1) * sizeof(scalar_t);
+      conv1d_smem<scalar_t><<<blocks, kThreads, smem, stream>>>(xp, w.data_ptr<scalar_t>(), op, n,
+                                                                m, k32);
+    }
   });
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }

@@ -302,7 +302,7 @@ def test_cuda_const_reloads_filter():
 
 @pytest.mark.parametrize("k", [1023, 1024, 1025, 2049, 3000], ids=lambda k: f"k={k}")
 @pytest.mark.parametrize("dtype", api.DTYPES)
-@pytest.mark.parametrize("backend", ["cuda_smem", "cuda_smem_reg"])
+@pytest.mark.parametrize("backend", ["cuda_smem", "cuda_smem_reg", "cuda_large_k"])
 def test_cuda_smem_chunk_boundaries(backend, dtype, k):
     """Both shared-tile kernels walk the filter in SMEM_CHUNK-tap chunks: one tap below, at
     and past a chunk, two chunks plus one tap, and a partial third chunk. N - K + 1 = 300
@@ -336,6 +336,89 @@ def test_cuda_smem_reg_window_boundaries(m, k):
     torch.testing.assert_close(out, api.conv1d(x, w), rtol=rtol, atol=atol)
 
 
+@pytest.mark.parametrize("offset", [0, 1], ids=["aligned", "offset"])
+@pytest.mark.parametrize("m", [1, 2047, 2048, 2049, 5000], ids=lambda m: f"m={m}")
+@pytest.mark.parametrize("k", [3, 7, 31], ids=lambda k: f"k={k}")
+@pytest.mark.parametrize("dtype", api.DTYPES)
+def test_cuda_unrolled(dtype, k, m, offset):
+    """Every compiled K, at block (2048 outputs) and per-thread boundaries, with x starting
+    on or one element past a 16-byte boundary."""
+    from problems.convolution_1d.cuda.implementation import UNROLLED_K
+
+    assert UNROLLED_K == (3, 7, 31)
+    skip_if_unavailable("cuda")
+    dtype = api.DTYPES[dtype]
+    skip_unsupported_dtype(dtype)
+    s = Sampler(dtype, "cuda", seed=11)
+    x = s.randn(offset + m + k - 1)[offset:]
+    w = s.randn(k)
+    rtol, atol = api.TOLERANCES[dtype]
+    out = api.conv1d(x, w, backend="cuda_unrolled")
+    torch.testing.assert_close(out, api.conv1d(x.clone(), w), rtol=rtol, atol=atol)
+
+
+def test_cuda_unrolled_other_k_not_implemented():
+    """Unsupported K is reported as not implemented (skipped by tests and lab.bench), and
+    a direct binding call cannot launch a missing specialization."""
+    ext = cuda_extension()
+    x, w = torch.zeros(64, device="cuda"), torch.zeros(5, device="cuda")
+    with pytest.raises(NotImplementedError, match="3, 7, 31"):
+        api.conv1d(x, w, backend="cuda_unrolled")
+    with pytest.raises(RuntimeError, match="specialized"):
+        ext.conv1d(x, w, torch.empty(60, device="cuda"), 4)
+
+
+def exact_conv(x, w):
+    """FP64 sums and sums of |products|, for the bound check at K too large for fsum loops."""
+    import torch.nn.functional as F
+
+    xd, wd = x.double().cpu().view(1, 1, -1), w.double().cpu().view(1, 1, -1)
+    return F.conv1d(xd, wd).view(-1), F.conv1d(xd.abs(), wd.abs()).view(-1)
+
+
+@pytest.mark.parametrize("k", [4096, 16385, 20000, 65537], ids=lambda k: f"k={k}")
+@pytest.mark.parametrize("dtype", api.DTYPES)
+@pytest.mark.parametrize("backend", ["cuda_large_k", "cuda_smem_reg", "cuda_smem", "cuda_naive"])
+def test_cuda_large_k(backend, dtype, k):
+    """Filters far longer than a block, a 1024-tap chunk and cuda_const's 16384-tap limit,
+    with 2049 outputs (one more than a cuda_smem_reg block). Checked against the
+    FP32-accumulation bound, because the fixed TOLERANCES are calibrated up to K = 2047 and
+    FP32 summation noise outgrows atol well before K = 65537 (docs/design.md,
+    "Tolerances")."""
+    skip_if_unavailable("cuda")
+    dtype = api.DTYPES[dtype]
+    skip_unsupported_dtype(dtype)
+    x, w = cases.make_inputs({"n": k + 2048, "k": k}, Sampler(dtype, "cuda", seed=12))
+    out = api.conv1d(x, w, backend=backend)
+    exact, magnitude = exact_conv(x, w)
+    worst = ((out.double().cpu() - exact).abs() / error_bound(exact, magnitude, k, dtype)).max()
+    assert worst.item() <= 1, f"error exceeds the FP32-accumulation bound by {worst:.2f}x"
+
+
+@pytest.mark.parametrize("k", [1, 7, 9, 31, 1033], ids=lambda k: f"k={k}")
+@pytest.mark.parametrize("reg_outputs", [2, 4, 8, 16])
+@pytest.mark.parametrize("backend", ["cuda_smem_reg", "cuda_large_k"])
+def test_cuda_reg_outputs(backend, reg_outputs, k):
+    """Every compiled R (outputs per thread), with tap tails shorter than, equal to and
+    longer than R, and a block-straddling output count for the largest block (256 * 16)."""
+    skip_if_unavailable("cuda")
+    m = 256 * reg_outputs + 1
+    x, w = cases.make_inputs({"n": m + k - 1, "k": k}, Sampler(torch.float32, "cuda", seed=13))
+    rtol, atol = api.TOLERANCES[torch.float32]
+    out = api.conv1d(x, w, backend=backend, reg_outputs=reg_outputs)
+    torch.testing.assert_close(out, api.conv1d(x, w), rtol=rtol, atol=atol)
+
+
+def test_cuda_rejects_invalid_reg_outputs():
+    skip_if_unavailable("cuda")
+    x, w = torch.zeros(64, device="cuda"), torch.zeros(3, device="cuda")
+    for backend, r in [("cuda_smem_reg", 3), ("cuda_smem_reg", 32), ("cuda_naive", 4)]:
+        with pytest.raises(ValueError):
+            api.conv1d(x, w, backend=backend, reg_outputs=r)
+    with pytest.raises(RuntimeError, match="reg_outputs"):
+        cuda_extension().conv1d(x, w, torch.empty(62, device="cuda"), 3, 5)
+
+
 def test_cuda_alias_is_smem_reg():
     from problems.convolution_1d.cuda import implementation
 
@@ -349,7 +432,7 @@ def test_cuda_rejects_invalid_variant():
     skip_if_unavailable("cuda")
     x, w = torch.zeros(8, device="cuda"), torch.zeros(3, device="cuda")
     with pytest.raises(ValueError):
-        api.conv1d(x, w, backend="cuda", variant=4)
+        api.conv1d(x, w, backend="cuda", variant=6)
 
 
 @pytest.mark.parametrize("dtype", api.DTYPES)
@@ -360,7 +443,7 @@ def test_binding_misaligned_output(backend, dtype):
     dtype = api.DTYPES[dtype]
     skip_unsupported_dtype(dtype)
     ext = cuda_extension()
-    n, k = 1031, 37
+    n, k = 1031, 31  # K = 31 has a cuda_unrolled specialization
     s = Sampler(dtype, "cuda", seed=8)
     x, w = s.randn(n), s.randn(k)
     buffer = torch.full((n - k + 3,), -7.0, dtype=dtype, device="cuda")
@@ -379,7 +462,7 @@ def test_binding_rejects_invalid_arguments():
     shared = torch.zeros(16, device="cuda")
     bad_calls = [
         (x, w, out, -1),  # variant
-        (x, w, out, 4),
+        (x, w, out, 6),
         (x, w, torch.empty(5, device="cuda"), 0),  # wrong output length
         (x, w, out.half(), 0),  # dtype mismatch
         (x, w.half(), out, 0),

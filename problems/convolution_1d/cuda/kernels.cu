@@ -17,6 +17,10 @@
 //   3 conv1d_smem_reg the conv1d_smem tile, stored in FP32 with conflict-free padding; each
 //                   thread computes kRegOutputs consecutive outputs from a sliding register
 //                   window: per tap one shared load, one w load, kRegOutputs FMAs.
+//   4 conv1d_unrolled the smem_reg layout with compile-time K in {3, 7, 31}: window and taps
+//                   held in registers, fully unrolled, no loop.
+//   5 conv1d_smem_reg<kStageW = true> (cuda_large_k): as variant 3, with each filter chunk
+//                   also staged in shared memory instead of read from global per tap.
 //
 // __constant__ memory is one buffer per device, shared by every call. Calls on one stream
 // are ordered (each upload waits for the previous kernel), but conv1d_const calls running
@@ -43,7 +47,8 @@ __constant__ float c_w[kMaxConstTaps];
 
 // conv1d_smem filter chunk: a tile of kThreads + kChunk - 1 elements (5 KB in FP32).
 constexpr int kChunk = 1024;
-// conv1d_smem_reg outputs per thread (a power of two keeps pad() a shift).
+// conv1d_smem_reg outputs per thread, R (a power of two keeps pad() a shift). The default
+// is kRegOutputs; launches can pick any of 2, 4, 8, 16 to study register pressure.
 constexpr int kRegOutputs = 8;
 
 template <typename T>
@@ -117,16 +122,27 @@ __global__ void conv1d_smem(const T *__restrict__ x, const T *__restrict__ w, T 
 // elements with one empty slot (pad(idx) = idx + idx / R) makes the stride R + 1, odd, so
 // a warp's tap read is conflict-free. As in conv1d_smem, every thread reaches every
 // barrier and slots past the end of x hold zero.
+//
+// kStageW = true is cuda_large_k: each filter chunk is also staged in shared memory (as
+// FP32, after the padded x tile) and read as a broadcast LDS, instead of one global load
+// per tap. Everything else is identical, so the two variants differ only in where w comes
+// from.
+template <int R>
+__host__ __device__ constexpr int tile_slots() {  // padded x tile, in floats
+  return (kThreads * R + kChunk) + (kThreads * R + kChunk) / R + 1;
+}
+
 template <int R>
 __device__ __forceinline__ int pad(int idx) {
   return idx + idx / R;
 }
 
-template <typename T, int R>
+template <typename T, int R, bool kStageW>
 __global__ void conv1d_smem_reg(const T *__restrict__ x, const T *__restrict__ w, T *__restrict__ out,
                                 int64_t n, int64_t m, int k) {
   extern __shared__ __align__(16) unsigned char smem_raw[];
   float *tile = reinterpret_cast<float *>(smem_raw);
+  float *wtile = tile + tile_slots<R>();  // kStageW only: kChunk floats
   const int span = blockDim.x * R;  // outputs per block
   const int64_t base = int64_t(blockIdx.x) * span;
   const int t0 = threadIdx.x * R;  // this thread's first output, relative to base
@@ -143,6 +159,10 @@ __global__ void conv1d_smem_reg(const T *__restrict__ x, const T *__restrict__ w
     const int64_t start = base + j0;  // x index of tile[0]
     for (int idx = threadIdx.x; idx < width; idx += blockDim.x)
       tile[pad<R>(idx)] = start + idx < n ? static_cast<float>(x[start + idx]) : 0.0f;
+    if constexpr (kStageW) {
+      for (int jj = threadIdx.x; jj < taps; jj += blockDim.x)
+        wtile[jj] = static_cast<float>(w[j0 + jj]);
+    }
     __syncthreads();
 
     float win[R];
@@ -155,7 +175,7 @@ __global__ void conv1d_smem_reg(const T *__restrict__ x, const T *__restrict__ w
     for (; j + R <= taps; j += R) {
 #pragma unroll
       for (int s = 0; s < R; ++s) {
-        const float wj = static_cast<float>(wc[j + s]);
+        const float wj = kStageW ? wtile[j + s] : static_cast<float>(wc[j + s]);
 #pragma unroll
         for (int r = 0; r < R; ++r)
           acc[r] = fmaf(win[(r + s) % R], wj, acc[r]);
@@ -163,7 +183,7 @@ __global__ void conv1d_smem_reg(const T *__restrict__ x, const T *__restrict__ w
       }
     }
     for (; j < taps; ++j) {  // fewer than R leftover taps
-      const float wj = static_cast<float>(wc[j]);
+      const float wj = kStageW ? wtile[j] : static_cast<float>(wc[j]);
 #pragma unroll
       for (int r = 0; r < R; ++r)
         acc[r] = fmaf(tile[pad<R>(t0 + r + j)], wj, acc[r]);
@@ -178,11 +198,77 @@ __global__ void conv1d_smem_reg(const T *__restrict__ x, const T *__restrict__ w
       out[o] = static_cast<T>(acc[r]);
   }
 }
+
+// Compile-time K (cuda_unrolled, K in {3, 7, 31}). The block stages its kThreads * R + K - 1
+// x values once, in the same padded FP32 tile layout; each thread then loads its R + K - 1
+// window values and the K taps into registers and runs all R * K FMAs fully unrolled, with
+// no loop, chunking or further loads: (R + K - 1) shared loads per R * K FMAs. Same tap
+// order as every other variant. Launched with exactly kThreads threads.
+template <typename T, int K, int R>
+__global__ void conv1d_unrolled(const T *__restrict__ x, const T *__restrict__ w, T *__restrict__ out,
+                                int64_t n, int64_t m) {
+  constexpr int kSpan = kThreads * R;
+  constexpr int kWidth = kSpan + K - 1;
+  __shared__ float tile[kWidth + kWidth / R + 1];
+  const int64_t base = int64_t(blockIdx.x) * kSpan;
+  const int t0 = threadIdx.x * R;
+
+  float wr[K];
+#pragma unroll
+  for (int j = 0; j < K; ++j)
+    wr[j] = static_cast<float>(w[j]);
+
+  for (int idx = threadIdx.x; idx < kWidth; idx += kThreads)
+    tile[pad<R>(idx)] = base + idx < n ? static_cast<float>(x[base + idx]) : 0.0f;
+  __syncthreads();
+
+  float xr[R + K - 1];
+#pragma unroll
+  for (int q = 0; q < R + K - 1; ++q)
+    xr[q] = tile[pad<R>(t0 + q)];
+
+#pragma unroll
+  for (int r = 0; r < R; ++r) {
+    float acc = 0.0f;
+#pragma unroll
+    for (int j = 0; j < K; ++j)
+      acc = fmaf(xr[r + j], wr[j], acc);
+    const int64_t o = base + t0 + r;
+    if (o < m)
+      out[o] = static_cast<T>(acc);
+  }
+}
 } // namespace
 
 int64_t max_const_taps() { return kMaxConstTaps; }
 
-void launch_conv1d(const at::Tensor &x, const at::Tensor &w, at::Tensor out, int64_t variant) {
+template <typename T, int R, bool kStageW>
+void launch_smem_reg(const T *x, const T *w, T *out, int64_t n, int64_t m, int k,
+                     cudaStream_t stream) {
+  const size_t smem = (tile_slots<R>() + (kStageW ? kChunk : 0)) * sizeof(float);
+  conv1d_smem_reg<T, R, kStageW>
+      <<<lab::grid_blocks(m, kThreads * R), kThreads, smem, stream>>>(x, w, out, n, m, k);
+}
+
+template <typename T, bool kStageW>
+void dispatch_smem_reg(int64_t r, const T *x, const T *w, T *out, int64_t n, int64_t m, int k,
+                       cudaStream_t stream) {
+  switch (r) {
+  case 2:
+    return launch_smem_reg<T, 2, kStageW>(x, w, out, n, m, k, stream);
+  case 4:
+    return launch_smem_reg<T, 4, kStageW>(x, w, out, n, m, k, stream);
+  case 8:
+    return launch_smem_reg<T, 8, kStageW>(x, w, out, n, m, k, stream);
+  case 16:
+    return launch_smem_reg<T, 16, kStageW>(x, w, out, n, m, k, stream);
+  default:
+    TORCH_CHECK(false, "conv1d: reg_outputs must be 2, 4, 8 or 16");
+  }
+}
+
+void launch_conv1d(const at::Tensor &x, const at::Tensor &w, at::Tensor out, int64_t variant,
+                   int64_t reg_outputs) {
   const c10::cuda::CUDAGuard guard(x.device());
   const cudaStream_t stream = c10::cuda::getCurrentCUDAStream(x.get_device()).stream();
   const int64_t n = x.numel();
@@ -213,13 +299,29 @@ void launch_conv1d(const at::Tensor &x, const at::Tensor &w, at::Tensor out, int
       const size_t smem = (kThreads + kChunk - 1) * sizeof(scalar_t);
       conv1d_smem<scalar_t><<<blocks, kThreads, smem, stream>>>(xp, w.data_ptr<scalar_t>(), op, n,
                                                                 m, k32);
+    } else if (variant == 3) {
+      dispatch_smem_reg<scalar_t, false>(reg_outputs, xp, w.data_ptr<scalar_t>(), op, n, m, k32,
+                                         stream);
+    } else if (variant == 5) {
+      dispatch_smem_reg<scalar_t, true>(reg_outputs, xp, w.data_ptr<scalar_t>(), op, n, m, k32,
+                                        stream);
     } else {
       constexpr int R = kRegOutputs;
-      // FP32 tile of span + kChunk elements after padding, plus one slot for the last pad.
-      const int width = kThreads * R + kChunk;
-      const size_t smem = (width + width / R + 1) * sizeof(float);
-      conv1d_smem_reg<scalar_t, R><<<lab::grid_blocks(m, kThreads * R), kThreads, smem, stream>>>(
-          xp, w.data_ptr<scalar_t>(), op, n, m, k32);
+      const int reg_blocks = lab::grid_blocks(m, kThreads * R);
+      const auto *wp = w.data_ptr<scalar_t>();
+      switch (k) {
+      case 3:
+        conv1d_unrolled<scalar_t, 3, R><<<reg_blocks, kThreads, 0, stream>>>(xp, wp, op, n, m);
+        break;
+      case 7:
+        conv1d_unrolled<scalar_t, 7, R><<<reg_blocks, kThreads, 0, stream>>>(xp, wp, op, n, m);
+        break;
+      case 31:
+        conv1d_unrolled<scalar_t, 31, R><<<reg_blocks, kThreads, 0, stream>>>(xp, wp, op, n, m);
+        break;
+      default:
+        TORCH_CHECK(false, "conv1d: cuda_unrolled is specialized for K in {3, 7, 31}");
+      }
     }
   });
   C10_CUDA_KERNEL_LAUNCH_CHECK();

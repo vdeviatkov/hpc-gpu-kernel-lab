@@ -1,6 +1,9 @@
 # Design
 
-[← 1D Convolution](../README.md) · **Design**
+[← 1D Convolution](../README.md) · **Design** · [Results](results.md) · [Testing](testing.md) ·
+[Benchmarking](benchmarking.md) · [Profiling](profiling.md)
+
+Measured outcomes of every hypothesis below are in [results](results.md).
 
 ## 0. Source verification
 
@@ -165,7 +168,7 @@ and `w[j]` (one address per warp, a broadcast). Neighbouring threads and warps r
 `x` element K times, so L1 and L2 absorb almost all of it. **DRAM traffic stays near the
 2s-bytes-per-output minimum; what scales with K is load instructions and L1 wavefronts.**
 
-Assumed issue rates per SM per clock (to be confirmed with ncu): 4 warp-wide FFMAs (128
+Assumed issue rates per SM per clock (confirmed in §4: 0.5 L1 requests and 1 data wavefront): 4 warp-wide FFMAs (128
 lanes), and about 1 L1/LSU data wavefront. With 2–3 wavefronts per tap (1–2 for `x`, 1 for
 `w`), the naive kernel is capped at 1/8–1/12 of FFMA peak, **about 5–7.6 TFLOP/s**:
 
@@ -298,8 +301,8 @@ with the roofline and with each other.
 ## 5. CUDA variants
 
 Every kernel uses 256 threads per block, FP32 accumulation with `fmaf`, and a single
-rounding to the input dtype. The first three compute one output per thread, `cuda_smem_reg`
-computes eight. `cuda` is an alias for `cuda_smem_reg`, which accepts every K.
+rounding to the input dtype. The first three compute one output per thread; `cuda_smem_reg`,
+`cuda_unrolled` and `cuda_large_k` compute eight. `cuda` is an alias for `cuda_smem_reg`, which accepts every K.
 
 | Backend | Kernel | Hypothesis |
 |---|---|---|
@@ -307,6 +310,8 @@ computes eight. `cuda` is an alias for `cuda_smem_reg`, which accepts every K.
 | `cuda_const` | `w` converted to FP32 and staged in `__constant__` memory | Every lane reads the same tap, so the constant cache broadcasts it and the `w` loads leave the LSU/L1 pipe. Requests per tap fall from 2 to 1, so up to 2× faster if requests are the limit (§4) |
 | `cuda_smem` | The block stages BLOCK + taps − 1 `x` values (BLOCK = 256) in shared memory behind a barrier; each thread reads its window from the tile; `w` as in naive | Each `x` is loaded from global about once per block, with halo overhead (taps − 1)/BLOCK. But LDS uses the same MIO/L1 data path as LDG, and `w` still costs one global load per tap, so requests per tap stay at 2. Only the line-crossing misalignment and tag lookups go away. Expect at most 1.5–2× over naive (§3, corollary 3), and for small K it may not beat naive plus L1 at all |
 | `cuda_smem_reg` (`cuda`) | The `cuda_smem` tile, stored in FP32 with one padding slot every 8 elements; each thread computes R = 8 consecutive outputs from a sliding register window | Per tap: 1 shared load, 1 broadcast `w` load, R FMAs. Shared loads per FMA drop from 1 to 1/R and `w` loads from 1 to 1/R, so this should be the variant that reaches FMA throughput at large K (§3, corollary 4) |
+| `cuda_unrolled` | Specializations for K ∈ {3, 7, 31} of the `cuda_smem_reg` layout: each thread loads its 8 + K − 1 window values and the K taps into registers, then runs all 8K FMAs fully unrolled | Shows what short-filter unrolling buys over a runtime loop: no loop or chunk overhead, no per-tap `w` load, and (8 + K − 1) shared loads per 8K FMAs. Other K raise `NotImplementedError`, which tests and `lab.bench` report as not implemented |
+| `cuda_large_k` | `cuda_smem_reg` with each 1024-tap filter chunk also staged in shared memory | Correct for K ≫ BLOCK, the correctness case the README calls out. `cuda_smem` and `cuda_smem_reg` already stream `x` in chunks and handle any K; this variant differs only in reading `w` as a broadcast shared load instead of one global load per tap, isolating that cost at large K |
 
 **Constant-memory details.** The filter is stored as FP32, so the capacity is the whole
 64 KiB user constant bank, 16384 taps, for every dtype. FP16/BF16 filters stored natively
@@ -345,3 +350,8 @@ details matter for throughput:
 `test_cuda_smem_reg_window_boundaries` covers K = 1, 2, 7, 8, 9, 15, 16, 17 and 1031–1033
 (group tails in the first and second chunk) against output counts 1, 2047, 2048, 2049 and
 5000 (block and per-thread boundaries).
+
+**Long filters.** `test_cuda_large_k` runs `cuda_naive`, `cuda_smem`, `cuda_smem_reg` and
+`cuda_large_k` at K = 4096, 16385 (one past `cuda_const`'s capacity), 20000 and 65537, with
+2049 outputs, in all three dtypes. It checks against the FP32-accumulation bound (§2), not
+the fixed tolerances, which are calibrated only up to K = 2047.

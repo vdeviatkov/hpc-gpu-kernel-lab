@@ -31,6 +31,11 @@ VARIANTS = {
     "cuda_smem": ("cuda", {"variant": 2}),
     # The shared tile plus 8 consecutive outputs per thread from a sliding register window.
     "cuda_smem_reg": ("cuda", {"variant": 3}),
+    # cuda_smem_reg compiled for K in {3, 7, 31}: fully unrolled, w in registers. Other K
+    # raise NotImplementedError.
+    "cuda_unrolled": ("cuda", {"variant": 4}),
+    # cuda_smem_reg with each filter chunk also staged in shared memory, for K >> BLOCK.
+    "cuda_large_k": ("cuda", {"variant": 5}),
 }
 # `cuda` is cuda_smem_reg: the recommended CUDA kernel, valid for every K.
 BACKENDS = ("pytorch", *VARIANTS, "cuda", "triton", "jax")

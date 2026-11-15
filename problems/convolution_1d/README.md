@@ -1,122 +1,99 @@
 # 09 · 1D Convolution
 
-## Source
+Valid 1-D cross-correlation, `out[i] = Σ_j x[i + j]·w[j]`, accumulated in FP32. Each output
+reads K neighbours, so neighbouring outputs share almost all their inputs, and the study's
+primary lesson is **halo reuse in shared memory**: when staging a tile and its halo pays, and
+what it actually relieves. Arithmetic intensity grows with the filter (about K/e FLOP/B), so
+one kernel sweeps from DRAM-bound to compute-bound across the RTX 5080's ridge at K ≈ 294
+(FP32).
 
-LeetGPU: [1D Convolution](https://leetgpu.com/challenges/1d-convolution)
+**Status:** PyTorch, CUDA (6 variants) and Triton implemented, validated and measured on RTX
+5080. 622 GPU correctness tests passed (60 expected skips); Compute Sanitizer memcheck,
+racecheck, synccheck and initcheck: 0 errors, 0 hazards. Source: [LeetGPU 1D
+Convolution](https://leetgpu.com/challenges/1d-convolution) (statement not verified: the page
+renders client-side; see [design §0](docs/design.md#0-source-verification)).
 
-Catalog title and difficulty verified on 2026-09-12.
+![Top: achieved TFLOP/s against K under the measured roofline; naive and cuda_smem flatten at 3.8 TFLOP/s, Triton at 5.0, cuda_const at 7.4, while the register-window kernels climb to 23-28 TFLOP/s past the ridge at K ≈ 294. Bottom: effective GB/s against the 802 GB/s copy ceiling.](figures/roofline_vs_k.svg)
 
-This is an original study plan, not a reproduction of the source statement.
-For LeetGPU work, confirm the current signature, layout, dtype, and boundary
-contract on the linked page before writing a reference. Any broader lab variant
-must be labeled separately.
+## Key results
 
-## Prerequisites
+- **The bottleneck is L1 requests, not DRAM.** For every kernel and every K, DRAM reads stay
+  at one element per output; L1/L2 absorb the K-fold reuse and every halo. One-output-per-
+  thread kernels leave the roofline at K = 15–31 onto a K-independent plateau set by load
+  requests per FMA: 3.8 TFLOP/s for `cuda_naive` (2 requests per warp-FMA), 7.4 for
+  `cuda_const` (1 request: its filter moves to uniform registers, exactly 2× naive).
+- **Shared memory alone never pays.** `cuda_smem` is slower than naive at small K (323 vs
+  290 µs, FP32 K = 31) and equal at large K: one shared load replaces one global load, the
+  requests per FMA do not change, and the barriers cost extra. L1 already caught the reuse
+  (95–99% hit rate).
+- **Shared memory plus registers does: 6–7×.** `cuda_smem_reg` (8 outputs per thread from a
+  sliding register window, conflict-free FP32 tile) reaches 23.0 TFLOP/s at K = 2047;
+  `cuda_large_k` (filter also in shared memory) 27.7; R = 16 29.8, about half the 58.9 TFLOP/s
+  FFMA peak. The new limit is still LSU request intake (0.26 requests per warp-FMA, 87% busy)
+  and issue slots.
+- **Halo overhead follows (K − 1)/span exactly** (to 0.3%, spans 512–4096, K 31–2047), and
+  none of it reaches DRAM.
+- **Short filters:** at K ≤ 15 `cuda_naive`, `cuda_const` and Triton run at the 802 GB/s copy
+  ceiling; the register-window kernels are 25–30% slower there. `cuda_unrolled` (K = 31) is
+  the fastest K = 31 kernel at 93% of the ceiling.
+- **Almost no L2 cliff at K = 31:** the copy ceiling drops from 2280 to 802 GB/s when the
+  data leaves L2, but only the two kernels nearest the ceiling lose anything (`cuda_const`
+  and `cuda_unrolled`, 10–13%); the rest are not bandwidth-bound even in L2.
+- **cuDNN is a weak baseline:** 12× slower than the best CUDA kernel at FP32 K = 31, and its
+  FP16 path falls back to a generic kernel from K = 255 (861 ms at N = 25 M).
 
-[08 · Matrix Transpose](../matrix_transpose/README.md)
+Recommended: `cuda_large_k` for K ≥ 127, `cuda_smem_reg` (the `cuda` alias) as the general
+choice from K ≈ 63, `cuda_const` or `cuda_unrolled` below. A K-based dispatch would beat the
+alias everywhere; see [results](docs/results.md#other-findings).
 
-## Difficulty
+## Documentation
 
-- LeetGPU: **Easy**.
+| Page | Contents |
+|---|---|
+| [Design](docs/design.md) | Contract, reference and tolerances, performance model, Triton analysis, CUDA variants and hypotheses |
+| [Results](docs/results.md) | K, N and R sweeps, Nsight Compute profiles, halo model, answers and limitations |
+| [Testing](docs/testing.md) | FP64 oracle, tolerance controls, boundary suites, sanitizers |
+| [Benchmarking](docs/benchmarking.md) | Reproduce the sweeps and what one sample measures |
+| [Profiling](docs/profiling.md) | Nsight Compute reports, metrics and the question each answers |
 
-## Why this problem matters
+## Quick start
 
-A one-dimensional stencil introduces reuse across neighboring outputs and the cost of loading tile halos.
+```bash
+python -m pytest -q problems/convolution_1d
+PYTHON=python bash problems/convolution_1d/benchmarks/sweep.sh
+```
 
-## Primary lesson
+```python
+import torch
+from problems.convolution_1d.api import conv1d
 
-**Halo reuse in shared memory**
+x, w = torch.randn(1 << 24, device="cuda"), torch.randn(255, device="cuda")
+out = conv1d(x, w, backend="cuda_large_k")  # out[i] = sum_j x[i + j] * w[j], N - K + 1 outputs
+```
 
-## Primary concepts
-
-- Shared memory
-- Tiled memory access
-- Boundary handling
-
-## Planned implementations
-
-- [x] PyTorch correctness reference and meaningful baseline (`F.conv1d`, TF32 off;
-  validated against an FP64 oracle; see [design](docs/design.md))
-- [ ] CUDA straightforward baseline
-- [ ] CUDA named optimization variants
-- [x] Triton implementation with explicit tile/warp choices (direct stencil, 8 bytes of
-  outputs per thread by default; see [design §4](docs/design.md#4-triton-the-naive-stencil-measured))
-- [ ] JAX/XLA comparison with compilation separated from execution
-
-JAX is included to examine XLA lowering/fusion or a meaningful high-level numerical baseline. A GPU comparison must use the same device, values, dtype, and completion scope.
-
-Scaffold: every stub raises `NotImplementedError` until it is implemented.
-Run the tests with `python -m pytest problems/convolution_1d` and benchmark with
-`python -m lab.bench convolution_1d`.
+Backends: `pytorch` (`F.conv1d`, TF32 off), `cuda_naive`, `cuda_const` (K ≤ 16384),
+`cuda_smem`, `cuda_smem_reg` (the `cuda` alias), `cuda_unrolled` (K ∈ {3, 7, 31}),
+`cuda_large_k` and `triton`. `cuda_smem_reg` and `cuda_large_k` take `reg_outputs` ∈ {2, 4, 8,
+16}; Triton takes `block_size` and `num_warps`. FP32, FP16 and BF16 inputs, always
+accumulated in FP32. The JAX baseline is not implemented.
 
 ```text
 convolution_1d/
-    README.md    study plan and status
-    api.py       validated public contract
-    cases.py     test and benchmark inputs, bytes and FLOPs
-    pytorch/     F.conv1d reference (TF32 off)
-    cuda/        kernels.cu, bindings.cpp, implementation.py (stubs)
-    triton/      direct-stencil Triton kernel
-    jax/         JAX baseline (stub)
-    tests/       test_convolution_1d.py
-    docs/        design, performance model and measurements
+    api.py         validated public contract
+    cases.py       test and benchmark inputs, bytes and FLOPs
+    pytorch/       F.conv1d reference (TF32 off)
+    cuda/          kernels.cu, bindings.cpp, implementation.py (six variants)
+    triton/        direct-stencil kernel, 8 bytes of outputs per thread
+    jax/           JAX baseline (not implemented)
+    tests/         test_convolution_1d.py
+    benchmarks/    sweep, sweep driver, FFMA peak, capture, summary and plot
+    docs/          design, results, testing, benchmarking, profiling
 ```
 
-## Optimization roadmap
+Raw benchmark JSON, 78 Nsight Compute reports with CSV exports, sanitizer logs and
+disassembly are in `artifacts/convolution_1d/` in this workspace. Large
+generated files are ignored by git; [compact evidence](benchmarks/measured_summary.json), the
+scripts and the figures are tracked.
 
-These are candidate experiments, not promised improvements or completed code.
-
-1. Direct per-output stencil with source boundary rules.
-2. Load a shared tile and halo.
-3. Vary outputs per thread.
-4. Compare short-filter unrolling with general loops.
-
-## Correctness focus
-
-Filter orientation, padding mode, boundary outputs, and filters larger than a tile.
-
-## Things to measure
-
-- Latency
-- Outputs/s
-- Global bytes per output
-- Shared memory and register usage
-
-Separate source conformance from broader shape/dtype experiments. Use the
-[benchmarking plan](../../docs/benchmarking.md) and choose
-[profiler metrics](../../docs/profiling.md) for a specific hypothesis.
-
-## Questions to answer
-
-- Does shared staging repay its barriers for short filters?
-- How does halo overhead change with tile and filter size?
-
-## Status
-
-🟨 **In progress**
-
-Contract, PyTorch reference, FP64-oracle tests, performance model and the Triton backend
-are done; see [design](docs/design.md). On the RTX 5080: 114 tests passed, and Compute
-Sanitizer (memcheck, racecheck, synccheck, initcheck over the Triton tests) reports 0
-errors. The LeetGPU source contract is not yet verified. CUDA and JAX backends are not
-implemented.
-
-Model in brief: arithmetic intensity is about K/s FLOP/B, and the measured RTX 5080 ridge
-is 64 FLOP/B (73 at achieved ceilings). FP32 K = 31 is DRAM-bound and K = 255 sits on the
-ridge.
-
-Measured so far:
-
-- **The naive stencil is LSU/L1-bound, not DRAM-bound.** Triton saturates L1 (99.7%)
-  while DRAM is 5% busy at K = 255. It runs at 5.0 (FP32) to 6.0 (FP16/BF16) TFLOP/s:
-  2.53 and 2.12 ms at N = 25M, K = 255, about 10× the 249 / 218 µs roofline floor. Even at
-  K = 31 it is 1.3× (FP32) to 2.3× (FP16) off the DRAM floor.
-- **L1 has two limits:** about 0.5 load requests and 1 wavefront per SM per clock. The
-  default tile of 8 bytes of outputs per thread balances them, 1.4–1.65× faster than
-  1024 outputs × 4 warps.
-- **cuDNN is a weak baseline here:** 1.6–9.1× slower than Triton, and 404× slower for FP16
-  K = 255, where it falls back to a generic kernel (861 ms).
-- Next: register-blocked CUDA variants to cut L1 requests per FMA.
-
-Follow the [optimization methodology](../../docs/methodology.md). When work
-begins, add evidence and update the [roadmap status](../../README.md#roadmap).
+Prerequisites: [08 · Matrix Transpose](../matrix_transpose/README.md). Follow the
+[optimization methodology](../../docs/methodology.md).

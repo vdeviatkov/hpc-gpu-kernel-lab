@@ -297,15 +297,16 @@ with the roofline and with each other.
 
 ## 5. CUDA variants
 
-Both kernels use one thread per output, 256 threads per block, FP32 accumulation with
-`fmaf`, and a single rounding to the input dtype. `cuda` is an alias for `cuda_naive`,
-the CUDA kernel that accepts every K.
+Every kernel uses 256 threads per block, FP32 accumulation with `fmaf`, and a single
+rounding to the input dtype. The first three compute one output per thread, `cuda_smem_reg`
+computes eight. `cuda` is an alias for `cuda_smem_reg`, which accepts every K.
 
 | Backend | Kernel | Hypothesis |
 |---|---|---|
-| `cuda_naive` (`cuda`) | `x` and `w` read from global memory | L1 hit rate is high, but the kernel is limited by LSU/L1. Per tap a warp issues 2 global loads: a coalesced, `j`-misaligned `x` load and a broadcast `w` load. That is 2K load instructions per 32 outputs, against the 2s-byte DRAM minimum per output |
+| `cuda_naive` | `x` and `w` read from global memory | L1 hit rate is high, but the kernel is limited by LSU/L1. Per tap a warp issues 2 global loads: a coalesced, `j`-misaligned `x` load and a broadcast `w` load. That is 2K load instructions per 32 outputs, against the 2s-byte DRAM minimum per output |
 | `cuda_const` | `w` converted to FP32 and staged in `__constant__` memory | Every lane reads the same tap, so the constant cache broadcasts it and the `w` loads leave the LSU/L1 pipe. Requests per tap fall from 2 to 1, so up to 2× faster if requests are the limit (§4) |
 | `cuda_smem` | The block stages BLOCK + taps − 1 `x` values (BLOCK = 256) in shared memory behind a barrier; each thread reads its window from the tile; `w` as in naive | Each `x` is loaded from global about once per block, with halo overhead (taps − 1)/BLOCK. But LDS uses the same MIO/L1 data path as LDG, and `w` still costs one global load per tap, so requests per tap stay at 2. Only the line-crossing misalignment and tag lookups go away. Expect at most 1.5–2× over naive (§3, corollary 3), and for small K it may not beat naive plus L1 at all |
+| `cuda_smem_reg` (`cuda`) | The `cuda_smem` tile, stored in FP32 with one padding slot every 8 elements; each thread computes R = 8 consecutive outputs from a sliding register window | Per tap: 1 shared load, 1 broadcast `w` load, R FMAs. Shared loads per FMA drop from 1 to 1/R and `w` loads from 1 to 1/R, so this should be the variant that reaches FMA throughput at large K (§3, corollary 4) |
 
 **Constant-memory details.** The filter is stored as FP32, so the capacity is the whole
 64 KiB user constant bank, 16384 taps, for every dtype. FP16/BF16 filters stored natively
@@ -325,3 +326,22 @@ Threads past the last output still load their share of the tile and reach every 
 they only skip the store. Tile slots past the end of `x` are zero-filled.
 `test_cuda_smem_chunk_boundaries` covers K = 1023, 1024, 1025, 2049 and 3000 with a
 partial last block.
+
+**Register-window details.** A block covers 256 × 8 = 2048 outputs. Thread t owns outputs
+8t … 8t + 7 of the block and holds 8 `x` values in registers. Taps run in groups of 8,
+unrolled. At step s of a group, output r uses window slot (r + s) mod 8, and slot s is then
+refilled from the tile, so every register index is a compile-time constant and the window
+rotates without moves. Fewer than 8 leftover taps per chunk read the tile directly. Three
+details matter for throughput:
+
+- **The tile is FP32.** Each element is converted once when loaded, not once per tap. The
+  padded tile is 3457 floats (13.8 KB) for every dtype, twice what a native FP16/BF16 tile
+  would need.
+- **The tile is padded.** Lanes read the tile 8 elements apart, which is an 8-way bank
+  conflict in FP32. Storing element idx at idx + idx/8 makes the lane stride 9, odd, so a
+  warp's tap read touches 32 distinct banks.
+- **`w` is still a global load,** but now one per 8 FMAs.
+
+`test_cuda_smem_reg_window_boundaries` covers K = 1, 2, 7, 8, 9, 15, 16, 17 and 1031–1033
+(group tails in the first and second chunk) against output counts 1, 2047, 2048, 2049 and
+5000 (block and per-thread boundaries).

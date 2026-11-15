@@ -29,8 +29,10 @@ VARIANTS = {
     "cuda_const": ("cuda", {"variant": 1}),
     # A shared tile of BLOCK + K - 1 x values per block behind a barrier; w as in naive.
     "cuda_smem": ("cuda", {"variant": 2}),
+    # The shared tile plus 8 consecutive outputs per thread from a sliding register window.
+    "cuda_smem_reg": ("cuda", {"variant": 3}),
 }
-# `cuda` is cuda_naive: the CUDA kernel that accepts every K.
+# `cuda` is cuda_smem_reg: the recommended CUDA kernel, valid for every K.
 BACKENDS = ("pytorch", *VARIANTS, "cuda", "triton", "jax")
 DTYPES = {
     "fp32": torch.float32,

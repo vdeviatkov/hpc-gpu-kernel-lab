@@ -302,10 +302,12 @@ def test_cuda_const_reloads_filter():
 
 @pytest.mark.parametrize("k", [1023, 1024, 1025, 2049, 3000], ids=lambda k: f"k={k}")
 @pytest.mark.parametrize("dtype", api.DTYPES)
-def test_cuda_smem_chunk_boundaries(dtype, k):
-    """cuda_smem walks the filter in SMEM_CHUNK-tap chunks: one tap below, at and past a
-    chunk, two chunks plus one tap, and a partial third chunk. N - K + 1 = 300 leaves a
-    partial last block, whose idle threads must still load the tile and reach the barriers."""
+@pytest.mark.parametrize("backend", ["cuda_smem", "cuda_smem_reg"])
+def test_cuda_smem_chunk_boundaries(backend, dtype, k):
+    """Both shared-tile kernels walk the filter in SMEM_CHUNK-tap chunks: one tap below, at
+    and past a chunk, two chunks plus one tap, and a partial third chunk. N - K + 1 = 300
+    leaves a partial last block, whose idle threads must still load the tile and reach the
+    barriers."""
     from problems.convolution_1d.cuda.implementation import SMEM_CHUNK
 
     assert SMEM_CHUNK == 1024
@@ -314,15 +316,40 @@ def test_cuda_smem_chunk_boundaries(dtype, k):
     skip_unsupported_dtype(dtype)
     x, w = cases.make_inputs({"n": k + 299, "k": k}, Sampler(dtype, "cuda", seed=9))
     rtol, atol = api.TOLERANCES[dtype]
-    out = api.conv1d(x, w, backend="cuda_smem")
+    out = api.conv1d(x, w, backend=backend)
     torch.testing.assert_close(out, api.conv1d(x, w), rtol=rtol, atol=atol)
+
+
+@pytest.mark.parametrize("k", [1, 2, 7, 8, 9, 15, 16, 17, 1031, 1032, 1033], ids=lambda k: f"k={k}")
+@pytest.mark.parametrize("m", [1, 2047, 2048, 2049, 5000], ids=lambda m: f"m={m}")
+def test_cuda_smem_reg_window_boundaries(m, k):
+    """cuda_smem_reg runs taps in groups of REG_OUTPUTS with a leftover tail, per 1024-tap
+    chunk (1031-1033 put the tail in the second chunk), and covers 256 * 8 = 2048 outputs
+    per block, so m straddles block and per-thread boundaries."""
+    from problems.convolution_1d.cuda.implementation import REG_OUTPUTS
+
+    assert REG_OUTPUTS == 8
+    skip_if_unavailable("cuda")
+    x, w = cases.make_inputs({"n": m + k - 1, "k": k}, Sampler(torch.float32, "cuda", seed=10))
+    rtol, atol = api.TOLERANCES[torch.float32]
+    out = api.conv1d(x, w, backend="cuda_smem_reg")
+    torch.testing.assert_close(out, api.conv1d(x, w), rtol=rtol, atol=atol)
+
+
+def test_cuda_alias_is_smem_reg():
+    from problems.convolution_1d.cuda import implementation
+
+    assert (
+        implementation.conv1d.__kwdefaults__["variant"]
+        == api.VARIANTS["cuda_smem_reg"][1]["variant"]
+    )
 
 
 def test_cuda_rejects_invalid_variant():
     skip_if_unavailable("cuda")
     x, w = torch.zeros(8, device="cuda"), torch.zeros(3, device="cuda")
     with pytest.raises(ValueError):
-        api.conv1d(x, w, backend="cuda", variant=3)
+        api.conv1d(x, w, backend="cuda", variant=4)
 
 
 @pytest.mark.parametrize("dtype", api.DTYPES)
@@ -352,7 +379,7 @@ def test_binding_rejects_invalid_arguments():
     shared = torch.zeros(16, device="cuda")
     bad_calls = [
         (x, w, out, -1),  # variant
-        (x, w, out, 3),
+        (x, w, out, 4),
         (x, w, torch.empty(5, device="cuda"), 0),  # wrong output length
         (x, w, out.half(), 0),  # dtype mismatch
         (x, w.half(), out, 0),

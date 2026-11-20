@@ -29,7 +29,12 @@ import torch
 from lab import dispatch
 
 FUNCTION = "gaussian_blur"
-BACKENDS = ("pytorch", "cuda", "triton", "jax")
+VARIANTS = {
+    # One output pixel per thread, the full KH x KW loop, image and kernel from global memory.
+    "cuda_direct": ("cuda", {"variant": 0}),
+}
+# `cuda` is cuda_direct until a faster kernel valid for every kernel exists.
+BACKENDS = ("pytorch", *VARIANTS, "cuda", "triton", "jax")
 DTYPES = {
     "fp32": torch.float32,
     "fp16": torch.float16,

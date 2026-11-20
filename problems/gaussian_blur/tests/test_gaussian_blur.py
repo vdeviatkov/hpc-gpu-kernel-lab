@@ -7,6 +7,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
+from lab import dispatch
 from lab.data import Sampler
 from lab.testing import (
     call_or_skip,
@@ -493,3 +494,84 @@ def test_traffic_model():
     assert cases.logical_bytes(c, torch.float32) == 4 * (2 * 4096 * 4096 + 441)
     assert cases.logical_bytes(c, torch.float16) == 2 * (2 * 4096 * 4096 + 441)
     assert cases.flops(c) == 2 * 4096 * 4096 * 441
+
+
+# --- CUDA variants --------------------------------------------------------------------
+
+
+def cuda_extension():
+    skip_if_unavailable("cuda")
+    from problems.gaussian_blur.cuda.implementation import extension
+
+    return extension()
+
+
+def test_cuda_alias_is_direct():
+    assert dispatch.resolve(api, "cuda") == ("cuda", {})
+    assert api.VARIANTS["cuda_direct"] == ("cuda", {"variant": 0})
+
+
+@pytest.mark.parametrize("dtype", api.DTYPES)
+@pytest.mark.parametrize("shape", [(8, 32), (9, 33), (4100, 3), (3, 4100)], ids=str)
+def test_cuda_grid_tails(shape, dtype):
+    """32 x 8 thread blocks: exact multiples, one-past tails in both axes, and images far
+    taller or wider than a block row, against the reference."""
+    skip_if_unavailable("cuda")
+    dtype = api.DTYPES[dtype]
+    skip_unsupported_dtype(dtype)
+    h, w = shape
+    image, kernel = cases.make_inputs(cases._case(h, w, 5, 7), Sampler(dtype, "cuda", seed=10))
+    rtol, atol = api.TOLERANCES[dtype]
+    for backend in api.VARIANTS:
+        out = api.gaussian_blur(image, kernel, backend=backend)
+        torch.testing.assert_close(out, api.gaussian_blur(image, kernel), rtol=rtol, atol=atol)
+
+
+@pytest.mark.parametrize("variant", sorted({o["variant"] for _, o in api.VARIANTS.values()}))
+@pytest.mark.parametrize("dtype", api.DTYPES)
+def test_binding_misaligned_output(dtype, variant):
+    """The API always allocates an aligned output; through the extension an output one
+    element into its storage must work and leave its neighbours untouched."""
+    ext = cuda_extension()
+    dtype = api.DTYPES[dtype]
+    skip_unsupported_dtype(dtype)
+    h, w = 45, 131
+    image, kernel = cases.make_inputs(cases._case(h, w, 7, 9), Sampler(dtype, "cuda", seed=12))
+    storage = torch.full((h * w + 2,), -7.0, dtype=dtype, device="cuda")
+    out = storage[1:-1].view(h, w)
+    ext.gaussian_blur(image, kernel, out, variant)
+    rtol, atol = api.TOLERANCES[dtype]
+    torch.testing.assert_close(out, api.gaussian_blur(image, kernel), rtol=rtol, atol=atol)
+    assert storage[0].item() == storage[-1].item() == -7.0
+
+
+def test_binding_rejects_invalid_arguments():
+    ext = cuda_extension()
+    image, kernel = torch.zeros(8, 9, device="cuda"), torch.zeros(3, 5, device="cuda")
+    out = torch.empty_like(image)
+    bad = [
+        (image, kernel, out, 1),  # variant
+        (image, kernel, out, -1),
+        (image, kernel, torch.empty(8, 8, device="cuda"), 0),  # output shape
+        (image, kernel, out.half(), 0),  # output dtype
+        (image, kernel.half(), out, 0),  # kernel dtype
+        (image, torch.zeros(2, 3, device="cuda"), out, 0),  # even KH
+        (image, torch.zeros(3, 4, device="cuda"), out, 0),  # even KW
+        (image, kernel, torch.empty(8, 18, device="cuda")[:, ::2], 0),  # non-contiguous
+        (image.view(-1), kernel, out.view(-1), 0),  # 1-D
+        (image.double(), kernel.double(), out.double(), 0),
+        (image.cpu(), kernel.cpu(), out.cpu(), 0),
+        (image, kernel, image, 0),  # output aliases the image
+    ]
+    for args in bad:
+        with pytest.raises(RuntimeError):
+            ext.gaussian_blur(*args)
+
+
+def test_cuda_rejects_invalid_variant():
+    skip_if_unavailable("cuda")
+    from problems.gaussian_blur.cuda.implementation import gaussian_blur
+
+    image, kernel = torch.zeros(8, 9, device="cuda"), torch.zeros(3, 3, device="cuda")
+    with pytest.raises(ValueError):
+        gaussian_blur(image, kernel, variant=1)

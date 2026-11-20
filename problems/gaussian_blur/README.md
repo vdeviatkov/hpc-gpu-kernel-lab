@@ -2,14 +2,21 @@
 
 ## Source
 
-LeetGPU: [Gaussian Blur](https://leetgpu.com/challenges/gaussian-blur)
+LeetGPU: [Gaussian Blur](https://leetgpu.com/challenges/gaussian-blur). Statement and checker
+verified on 2026-11-17 from the public challenge repository
+([`28_gaussian_blur`](https://github.com/AlphaGPU/leetgpu-challenges/tree/main/challenges/medium/28_gaussian_blur),
+commit 7691ca5); see [design §0](docs/design.md#0-source-verification).
 
-Catalog title and difficulty verified on 2026-09-12.
+- A 2-D, possibly rectangular kernel (KH, KW odd, 3 to 21) is passed, not σ.
+- Zero padding, same-size output, cross-correlation.
+- FP32, images up to 4096 × 4096, checker `F.conv2d` with `atol = rtol = 1e-5`.
+- Performance case: 512 × 512 with a 7 × 7 kernel. That kernel is uniform random, so it is
+  **neither normalized nor separable**, despite the statement's "Gaussian" and "sums to 1".
 
-This is an original study plan, not a reproduction of the source statement.
-For LeetGPU work, confirm the current signature, layout, dtype, and boundary
-contract on the linked page before writing a reference. Any broader lab variant
-must be labeled separately.
+**Lab contract** ([design §1](docs/design.md#1-algorithm-and-contract)): the source
+operation, widened to FP16/BF16 and KH, KW ≥ 1, accumulated in FP32 and rounded once. A
+backend may use two 1-D passes only when `api.separable_factors` accepts the kernel, with an
+FP32 intermediate.
 
 ## Prerequisites
 
@@ -35,7 +42,7 @@ This is retained as a distinct algorithmic experiment: separability can save ari
 
 ## Planned implementations
 
-- [ ] PyTorch correctness reference and meaningful baseline
+- [x] PyTorch correctness reference and meaningful baseline
 - [ ] CUDA straightforward baseline
 - [ ] CUDA named optimization variants
 - [ ] Triton implementation with explicit tile/warp choices
@@ -50,13 +57,14 @@ Run the tests with `python -m pytest problems/gaussian_blur` and benchmark with
 ```text
 gaussian_blur/
     README.md   study plan and status
-    api.py      public entry point and draft contract
+    api.py      public entry point, contract, separability test
     cases.py    test and benchmark inputs, bytes and FLOPs
-    pytorch/    reference (stub)
+    pytorch/    F.conv2d reference (TF32 off)
     cuda/       kernels.cu, bindings.cpp, implementation.py (stubs)
     triton/     Triton kernel (stub)
     jax/        JAX baseline (stub)
     tests/      test_gaussian_blur.py
+    docs/       design.md
 ```
 
 ## Optimization roadmap
@@ -70,7 +78,20 @@ These are candidate experiments, not promised improvements or completed code.
 
 ## Correctness focus
 
-Image edges, rectangular kernels, normalization, and numerical effects of factorization.
+See [design §2](docs/design.md#2-correctness-reference).
+
+- **Reference:** cuDNN `F.conv2d` with TF32 off.
+- **FP64 oracle:** an fsum oracle checked against the FP32-accumulation bound, which grows
+  with KH·KW. Edge cases: 1 × 1 images, kernels larger than the image, borders, odd W,
+  misaligned rows.
+- **Separability:** detected by the FP32-factor residual of the SVD rank-1 term, which must
+  be within 4 u_d of the kernel's norm. Gaussians land below 1 u_d; the source's kernels
+  land at 0.2 relative.
+- **Factoring stays within tolerance:** the two-pass result is within both the fixed
+  tolerances and its own KH + KW bound.
+- **Every backend is checked against the kernel-scaled bound.** The fixed FP16/BF16
+  tolerances cannot catch reduced-precision accumulation at 7 × 7, so a fixed tolerance
+  alone is not enough.
 
 ## Things to measure
 
@@ -90,10 +111,8 @@ Separate source conformance from broader shape/dtype experiments. Use the
 
 ## Status
 
-⬜ **Planned**
-
-No accepted implementation or measured results for this curriculum entry.
-Results pending hardware benchmark.
+🟨 **In Progress.** Contract, PyTorch reference and correctness suite done; CUDA, Triton and
+JAX backends not implemented yet.
 
 Follow the [optimization methodology](../../docs/methodology.md). When work
 begins, add evidence and update the [roadmap status](../../README.md#roadmap).

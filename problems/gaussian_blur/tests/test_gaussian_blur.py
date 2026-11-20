@@ -509,6 +509,49 @@ def cuda_extension():
 def test_cuda_alias_is_direct():
     assert dispatch.resolve(api, "cuda") == ("cuda", {})
     assert api.VARIANTS["cuda_direct"] == ("cuda", {"variant": 0})
+    assert api.VARIANTS["cuda_direct_const"] == ("cuda", {"variant": 1})
+
+
+def test_cuda_const_capacity():
+    """127 x 129 = 16383 taps fit the 64 KiB __constant__ buffer; 129 x 129 = 16641 do not,
+    through the API (ValueError) and the binding (RuntimeError). The kernel is far larger
+    than the image, so most taps read padding; checked against the K-scaled contract bound,
+    since 16383 FP32 terms outgrow the fixed tolerance."""
+    from problems.gaussian_blur.cuda.implementation import MAX_CONST_TAPS
+
+    ext = cuda_extension()
+    assert ext.max_const_taps() == MAX_CONST_TAPS == 16384
+    s = Sampler(torch.float32, "cuda", seed=13)
+    image = s.randn(9, 11)
+    kernel = s.uniform(0.0001, 0.02, 127, 129)
+    out = api.gaussian_blur(image, kernel, backend="cuda_direct_const")
+    worst = bound_ratio(out, *contract_bound(image, kernel))
+    assert worst <= 1, f"error exceeds the contract bound by {worst:.2f}x"
+    big = s.uniform(0.0001, 0.02, 129, 129)
+    with pytest.raises(ValueError, match="16384"):
+        api.gaussian_blur(image, big, backend="cuda_direct_const")
+    with pytest.raises(RuntimeError, match="16384"):
+        ext.gaussian_blur(image, big, torch.empty_like(image), 1)
+
+
+def test_cuda_const_reloads_kernel():
+    """__constant__ memory persists between calls: each call must upload its own kernel,
+    including a smaller one after a larger one and a different shape with the same tap
+    count, with no host synchronization in between."""
+    skip_if_unavailable("cuda")
+    s = Sampler(torch.float32, "cuda", seed=14)
+    image = s.randn(67, 131)
+    kernels = [
+        s.uniform(0.0001, 0.02, 21, 21),
+        cases.gaussian_2d(3, 3).float().cuda(),
+        s.uniform(0.0001, 0.02, 21, 21),
+        cases.gaussian_2d(7, 5).float().cuda(),
+        cases.gaussian_2d(5, 7).float().cuda(),
+    ]
+    outs = [api.gaussian_blur(image, k, backend="cuda_direct_const") for k in kernels]
+    rtol, atol = api.TOLERANCES[torch.float32]
+    for kernel, out in zip(kernels, outs, strict=True):
+        torch.testing.assert_close(out, api.gaussian_blur(image, kernel), rtol=rtol, atol=atol)
 
 
 @pytest.mark.parametrize("dtype", api.DTYPES)
@@ -550,7 +593,7 @@ def test_binding_rejects_invalid_arguments():
     image, kernel = torch.zeros(8, 9, device="cuda"), torch.zeros(3, 5, device="cuda")
     out = torch.empty_like(image)
     bad = [
-        (image, kernel, out, 1),  # variant
+        (image, kernel, out, 2),  # variant
         (image, kernel, out, -1),
         (image, kernel, torch.empty(8, 8, device="cuda"), 0),  # output shape
         (image, kernel, out.half(), 0),  # output dtype
@@ -574,4 +617,4 @@ def test_cuda_rejects_invalid_variant():
 
     image, kernel = torch.zeros(8, 9, device="cuda"), torch.zeros(3, 3, device="cuda")
     with pytest.raises(ValueError):
-        gaussian_blur(image, kernel, variant=1)
+        gaussian_blur(image, kernel, variant=2)

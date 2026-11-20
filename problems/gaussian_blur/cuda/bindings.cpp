@@ -6,10 +6,11 @@
 
 void launch_gaussian_blur(const at::Tensor &image, const at::Tensor &kernel, at::Tensor out,
                           int64_t variant);
+int64_t max_const_taps();
 
 void gaussian_blur(const at::Tensor &image, const at::Tensor &kernel, at::Tensor out,
                    int64_t variant) {
-  TORCH_CHECK(variant == 0, "gaussian_blur: invalid variant");
+  TORCH_CHECK(variant == 0 || variant == 1, "gaussian_blur: invalid variant");
   for (const auto &t : {image, kernel, out}) {
     lab::check_cuda_matrix(t, "gaussian_blur");
     lab::check_plain(t, "gaussian_blur");
@@ -30,4 +31,5 @@ void gaussian_blur(const at::Tensor &image, const at::Tensor &kernel, at::Tensor
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("gaussian_blur", &gaussian_blur, "10 · Gaussian Blur", pybind11::arg("image"),
         pybind11::arg("kernel"), pybind11::arg("out"), pybind11::arg("variant") = 0);
+  m.def("max_const_taps", &max_const_taps, "cuda_direct_const kernel capacity in taps");
 }

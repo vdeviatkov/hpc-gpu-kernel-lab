@@ -32,6 +32,8 @@ FUNCTION = "gaussian_blur"
 VARIANTS = {
     # One output pixel per thread, the full KH x KW loop, image and kernel from global memory.
     "cuda_direct": ("cuda", {"variant": 0}),
+    # The same, with the kernel staged as FP32 in __constant__ memory (KH * KW <= 16384).
+    "cuda_direct_const": ("cuda", {"variant": 1}),
 }
 # `cuda` is cuda_direct until a faster kernel valid for every kernel exists.
 BACKENDS = ("pytorch", *VARIANTS, "cuda", "triton", "jax")
